@@ -1,0 +1,37 @@
+name: productionflow
+description: "ProductionFlow — shoot coordination for small film crews."
+publish_to: 'none'
+
+# Bump the build number on every APK you hand to someone.
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.13.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Routing. Two routes today: "/" landing, "/app" shell.
+  go_router: ^18.0.2
+
+  # State. Wired up (ProviderScope is installed in main) but nothing uses it yet.
+  flutter_riverpod: ^3.4.3
+
+  # HTTP. Configured in core/api_client.dart but not called anywhere yet.
+  dio: ^5.11.1
+
+  # Fraunces + Inter, the pairing defined in core/theme.dart.
+  google_fonts: ^9.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    # Fixture JSON, so the client runs with no backend. See core/mock/mock_api.dart.
+    - lib/core/mock/fixtures/

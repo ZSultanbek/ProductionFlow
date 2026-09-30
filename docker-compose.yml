@@ -1,0 +1,89 @@
+name: productionflow
+
+# The whole project in one command:
+#
+#   docker compose up --build
+#
+# Then open http://localhost:3000. Migrations are applied automatically before
+# the API starts, so there is no second step.
+#
+# This is the only compose file in the repo. `backend/Makefile` points at it with
+# `-f`, so the backend dev loop and the full stack share one definition of
+# Postgres rather than drifting apart.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: productionflow
+      POSTGRES_PASSWORD: productionflow
+      POSTGRES_DB: productionflow
+    ports:
+      # Overridable because plenty of machines already run a Postgres on 5432,
+      # and a native one bound to 127.0.0.1 silently wins over this mapping.
+      # The symptom is a confusing `role "productionflow" does not exist`:
+      #   POSTGRES_PORT=5433 docker compose up
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U productionflow -d productionflow"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # One-shot: applies migrations/*.up.sql, then exits 0. The API waits for that
+  # exit rather than racing an unmigrated database.
+  migrate:
+    image: migrate/migrate:v4.19.0
+    volumes:
+      - ./backend/migrations:/migrations:ro
+    command:
+      - -path=/migrations
+      - -database=postgres://productionflow:productionflow@postgres:5432/productionflow?sslmode=disable
+      - up
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build:
+      context: ./backend
+      args:
+        VERSION: ${VERSION:-dev}
+        COMMIT: ${COMMIT:-none}
+        BUILT_AT: ${BUILT_AT:-unknown}
+    environment:
+      # "postgres" is the service name on the compose network, not localhost.
+      DATABASE_URL: postgres://productionflow:productionflow@postgres:5432/productionflow?sslmode=disable
+      API_ADDR: ":8080"
+      APP_ENV: ${APP_ENV:-dev}
+    ports:
+      # Exposed for curl and for pointing a locally-run Flutter app at it. The
+      # browser does not use this port — the web container proxies /api instead.
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    # No healthcheck: the runtime image is distroless and has no shell, curl or
+    # wget to run one with. Check it from the host: curl localhost:8080/api/health
+
+  web:
+    build:
+      context: ./client
+      args:
+        # Empty means same-origin. nginx proxies /api to the api service, so the
+        # bundle carries no hostname and the image works anywhere.
+        API_BASE_URL: ""
+    ports:
+      - "${WEB_PORT:-3000}:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

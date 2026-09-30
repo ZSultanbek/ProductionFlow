@@ -1,0 +1,22 @@
+# Keep the build context small and, more importantly, keep host-generated Dart
+# state out of it: .dart_tool holds absolute paths from this machine and would
+# overwrite what `flutter pub get` produced inside the image.
+.dart_tool/
+.flutter-plugins-dependencies
+build/
+
+# The image builds the web bundle only — no Gradle, no SDK, no NDK.
+android/
+
+.git
+.gitignore
+.idea/
+*.iml
+.vscode/
+
+Dockerfile
+.dockerignore
+README.md
+
+# Tests run in CI and locally, not during the image build.
+test/

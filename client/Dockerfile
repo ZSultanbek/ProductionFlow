@@ -70,8 +70,10 @@ COPY --from=build /app/build/web /usr/share/nginx/html
 EXPOSE 80
 
 # busybox wget is present in the nginx alpine image, so this container can
-# health-check itself.
+# health-check itself. 127.0.0.1 rather than localhost on purpose: localhost
+# resolves to ::1 first in here and nginx listens on IPv4 only, so the check
+# would fail against a perfectly healthy server.
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --spider -q http://localhost/ || exit 1
+  CMD wget --spider -q http://127.0.0.1/ || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]

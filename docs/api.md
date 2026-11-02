@@ -102,9 +102,9 @@ Updated in the same PR that implements an endpoint.
 | Endpoint | Story | Status |
 | --- | --- | --- |
 | `GET /api/health` | — | implemented |
-| `POST /api/auth/register` | US-01 | `501` |
-| `POST /api/auth/login` | US-01 | `501` |
-| `GET /api/me` | US-01 | `501` |
+| `POST /api/auth/register` | US-01 | implemented |
+| `POST /api/auth/login` | US-01 | implemented |
+| `GET /api/me` | US-01 | implemented |
 | `GET /api/projects` | US-02 | `501` |
 | `POST /api/projects` | US-02 | `501` |
 | `GET /api/projects/{project_id}` | US-02 | `501` |

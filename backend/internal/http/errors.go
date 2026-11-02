@@ -16,6 +16,9 @@ type errorResponse struct {
 type errorBody struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+	// Fields is only set on validation_failed: one human-readable problem per
+	// bad input field. omitempty keeps every other error at exactly two keys.
+	Fields map[string]string `json:"fields,omitempty"`
 }
 
 // writeJSON marshals before writing the header, so an encoding failure produces
@@ -42,4 +45,21 @@ func writeRaw(w http.ResponseWriter, status int, body []byte) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	_, _ = w.Write(body)
+}
+
+// writeValidationError is the 422 every handler sends when input fails the
+// field rules in docs/api.md. fields must not be empty.
+func writeValidationError(w http.ResponseWriter, fields map[string]string) {
+	writeJSON(w, http.StatusUnprocessableEntity, errorResponse{Error: errorBody{
+		Code:    "validation_failed",
+		Message: "some fields are invalid",
+		Fields:  fields,
+	}})
+}
+
+// writeInternalError logs the real cause and sends the client nothing it could
+// use — a driver error or a stack of wrapped messages is for us, not for them.
+func writeInternalError(w http.ResponseWriter, logger *slog.Logger, what string, err error) {
+	logger.Error(what, "error", err)
+	writeError(w, http.StatusInternalServerError, "internal", "internal server error")
 }

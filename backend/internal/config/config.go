@@ -10,6 +10,14 @@ import (
 // DefaultDatabaseURL matches the postgres service in docker-compose.yml.
 const DefaultDatabaseURL = "postgres://productionflow:productionflow@localhost:5432/productionflow?sslmode=disable"
 
+// devJWTSecret signs tokens when nothing else is configured, so `make dev` works
+// out of the box. It is public — it is in this file — so Load refuses to use it
+// outside dev.
+const devJWTSecret = "dev-only-not-a-secret-dev-only-not-a-secret"
+
+// minJWTSecretBytes: HS256 wants a key at least as long as its 256-bit output.
+const minJWTSecretBytes = 32
+
 type Config struct {
 	// Addr is the listen address, e.g. ":8080".
 	Addr string
@@ -19,16 +27,24 @@ type Config struct {
 	ShutdownTimeout time.Duration
 	// Env is "dev" or "prod"; dev switches the logger to text output.
 	Env string
+	// JWTSecret signs access tokens. Required outside dev.
+	JWTSecret []byte
+	// JWTTTL is how long an access token stays valid. No refresh flow in the
+	// MVP, so this is also how long until the user has to log in again.
+	JWTTTL time.Duration
 }
 
-// Load reads the environment. It only fails on a value that is present but
-// unparseable — a missing value is not an error, it takes the default.
+// Load reads the environment. A missing value takes its default; a value that
+// is present but unparseable is an error. Outside dev, a missing JWT_SECRET is
+// an error too — a production server signing tokens with a published key would
+// let anyone log in as anyone.
 func Load() (Config, error) {
 	cfg := Config{
 		Addr:            envString("API_ADDR", ":8080"),
 		DatabaseURL:     envString("DATABASE_URL", DefaultDatabaseURL),
 		ShutdownTimeout: 10 * time.Second,
 		Env:             envString("APP_ENV", "dev"),
+		JWTTTL:          7 * 24 * time.Hour,
 	}
 
 	if raw := os.Getenv("SHUTDOWN_TIMEOUT_SECONDS"); raw != "" {
@@ -37,6 +53,25 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("SHUTDOWN_TIMEOUT_SECONDS: want a positive integer, got %q", raw)
 		}
 		cfg.ShutdownTimeout = time.Duration(seconds) * time.Second
+	}
+
+	if raw := os.Getenv("JWT_TTL_HOURS"); raw != "" {
+		hours, err := strconv.Atoi(raw)
+		if err != nil || hours <= 0 {
+			return Config{}, fmt.Errorf("JWT_TTL_HOURS: want a positive integer, got %q", raw)
+		}
+		cfg.JWTTTL = time.Duration(hours) * time.Hour
+	}
+
+	switch secret := os.Getenv("JWT_SECRET"); {
+	case secret != "" && len(secret) < minJWTSecretBytes:
+		return Config{}, fmt.Errorf("JWT_SECRET: want at least %d bytes, got %d", minJWTSecretBytes, len(secret))
+	case secret != "":
+		cfg.JWTSecret = []byte(secret)
+	case cfg.Env == "dev":
+		cfg.JWTSecret = []byte(devJWTSecret)
+	default:
+		return Config{}, fmt.Errorf("JWT_SECRET is required when APP_ENV=%q (generate one with: openssl rand -base64 48)", cfg.Env)
 	}
 
 	return cfg, nil

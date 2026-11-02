@@ -1,19 +1,18 @@
-// Package auth handles identity: password hashing and JWT access tokens.
+// Package auth handles identity: password hashing and access tokens.
 //
 // What belongs here:
-//   - Password hashing and verification (bcrypt or argon2id — pick one and
-//     keep it; the choice needs a line in the PR since it is a new dependency).
-//   - Issuing and verifying the access token. `Authorization: Bearer <jwt>`,
-//     access token only — the MVP has no refresh flow, see CLAUDE.md.
-//   - The claims struct (participant id, project id, role) and the middleware
-//     that puts the authenticated participant on the request context.
+//   - Password hashing and verification — bcrypt, cost 10 (password.go).
+//   - Issuing and verifying the access token — HS256 JWT carrying only the
+//     user id, 7-day lifetime, no refresh flow (jwt.go). See CLAUDE.md and
+//     docs/architecture.md §4.3.
+//   - Later: signing and verifying impact preview tokens (§4.4).
 //
 // What does not belong here:
-//   - Permission rules about domain entities ("can this role move a shooting
-//     day"). That is a business rule and belongs in domain; auth only answers
-//     who the caller is.
-//   - Loading participants from Postgres. Take a lookup function or interface
-//     so this package stays testable without a database.
-//
-// Nothing is implemented yet — the skeleton serves unauthenticated stubs.
+//   - Roles and permissions. A role belongs to a participant in a project, not
+//     to the user, so "is this person a producer here" is answered per request
+//     from the database, never from the token.
+//   - Loading anything from Postgres. This package is pure crypto helpers and
+//     is tested without a database.
+//   - The HTTP middleware that reads the Authorization header — that lives in
+//     internal/http, because it writes error responses.
 package auth

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -47,17 +49,16 @@ func TestWriteErrorEnvelope(t *testing.T) {
 func TestStubsReturnNotImplemented(t *testing.T) {
 	router := NewRouter(testDeps(nil))
 
-	for _, tc := range []struct{ method, path string }{
-		{http.MethodGet, "/api/projects"},
-		{http.MethodPost, "/api/projects"},
-		{http.MethodGet, "/api/days"},
-		{http.MethodPost, "/api/days"},
-		{http.MethodPost, "/api/changes/preview"},
-		{http.MethodPost, "/api/changes/apply"},
-	} {
-		t.Run(tc.method+" "+tc.path, func(t *testing.T) {
+	// Fill every {wildcard} with a UUID-shaped value to get a concrete path.
+	wildcard := regexp.MustCompile(`\{[a-z_]+\}`)
+
+	for _, pattern := range notYetImplemented {
+		method, path, _ := strings.Cut(pattern, " ")
+		path = wildcard.ReplaceAllString(path, "6f1b5f4e-1c2a-4d3b-9e5f-0a1b2c3d4e5f")
+
+		t.Run(pattern, func(t *testing.T) {
 			rec := httptest.NewRecorder()
-			router.ServeHTTP(rec, httptest.NewRequest(tc.method, tc.path, nil))
+			router.ServeHTTP(rec, httptest.NewRequest(method, path, nil))
 
 			if rec.Code != http.StatusNotImplemented {
 				t.Errorf("status = %d, want %d", rec.Code, http.StatusNotImplemented)

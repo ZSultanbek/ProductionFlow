@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ZSultanbek/ProductionFlow/backend/internal/auth"
 	"github.com/ZSultanbek/ProductionFlow/backend/internal/config"
 	apihttp "github.com/ZSultanbek/ProductionFlow/backend/internal/http"
 	"github.com/ZSultanbek/ProductionFlow/backend/internal/store"
@@ -62,6 +63,8 @@ func run() error {
 		Addr: cfg.Addr,
 		Handler: apihttp.NewRouter(apihttp.Deps{
 			DB:     db,
+			Users:  db,
+			Tokens: auth.NewTokens(cfg.JWTSecret, cfg.JWTTTL),
 			Build:  apihttp.BuildInfo{Version: version, Commit: commit, BuiltAt: builtAt},
 			Logger: logger,
 		}),

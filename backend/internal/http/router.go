@@ -23,11 +23,14 @@ type BuildInfo struct {
 
 // Deps is everything the handlers need, passed in from cmd/api.
 type Deps struct {
-	DB     Pinger
-	Users  UserStore
-	Tokens *auth.Tokens
-	Build  BuildInfo
-	Logger *slog.Logger
+	DB       Pinger
+	Users    UserStore
+	Projects ProjectStore
+	Tokens   *auth.Tokens
+	Build    BuildInfo
+	Logger   *slog.Logger
+	// PublicWebURL is the web app's base URL, used to build invite links.
+	PublicWebURL string
 }
 
 // notYetImplemented is every route in docs/api.md that has no handler yet. Each
@@ -35,11 +38,6 @@ type Deps struct {
 // envelope. Move a line out of here when its handler lands, and update the
 // Status table in docs/api.md in the same PR.
 var notYetImplemented = []string{
-	"GET /api/projects",
-	"POST /api/projects",
-	"GET /api/projects/{project_id}",
-	"GET /api/invites/{code}",
-	"POST /api/invites/{code}/join",
 	"GET /api/projects/{project_id}/participants",
 	"POST /api/projects/{project_id}/participants",
 	"GET /api/projects/{project_id}/days",
@@ -68,10 +66,16 @@ func NewRouter(deps Deps) http.Handler {
 	mux.HandleFunc("GET /api/health", handleHealth(deps))
 	mux.HandleFunc("POST /api/auth/register", handleRegister(deps))
 	mux.HandleFunc("POST /api/auth/login", handleLogin(deps))
+	mux.HandleFunc("GET /api/invites/{code}", handleGetInvite(deps))
 
 	// Logged in. Every new route goes below this line, wrapped in requireAuth,
 	// unless docs/api.md marks it *public*.
 	mux.HandleFunc("GET /api/me", requireAuth(deps, handleMe(deps)))
+
+	mux.HandleFunc("GET /api/projects", requireAuth(deps, handleListProjects(deps)))
+	mux.HandleFunc("POST /api/projects", requireAuth(deps, handleCreateProject(deps)))
+	mux.HandleFunc("GET /api/projects/{project_id}", requireAuth(deps, handleGetProject(deps)))
+	mux.HandleFunc("POST /api/invites/{code}/join", requireAuth(deps, handleJoinInvite(deps)))
 
 	for _, pattern := range notYetImplemented {
 		mux.HandleFunc(pattern, notImplemented)

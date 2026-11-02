@@ -62,11 +62,13 @@ func run() error {
 	srv := &http.Server{
 		Addr: cfg.Addr,
 		Handler: apihttp.NewRouter(apihttp.Deps{
-			DB:     db,
-			Users:  db,
-			Tokens: auth.NewTokens(cfg.JWTSecret, cfg.JWTTTL),
-			Build:  apihttp.BuildInfo{Version: version, Commit: commit, BuiltAt: builtAt},
-			Logger: logger,
+			DB:           db,
+			Users:        db,
+			Projects:     db,
+			Tokens:       auth.NewTokens(cfg.JWTSecret, cfg.JWTTTL),
+			Build:        apihttp.BuildInfo{Version: version, Commit: commit, BuiltAt: builtAt},
+			Logger:       logger,
+			PublicWebURL: cfg.PublicWebURL,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

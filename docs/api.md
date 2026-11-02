@@ -69,7 +69,7 @@ The reasoning behind the shapes below is in [`architecture.md`](architecture.md)
 | `invite_not_found` | 404 | No project with that invite code |
 | `notification_not_found` | 404 | No such notification for you |
 | `email_taken` | 409 | Register with an email that already has an account |
-| `participant_email_taken` | 409 | Adding a participant whose email is already in the project |
+| `participant_email_taken` | 409 | Adding a participant whose email is already in the project, or joining when your email belongs to someone else there |
 | `scene_number_taken` | 409 | Scene number already used in this project |
 | `preview_stale` | 409 | Apply after the day or its affected people changed — preview again |
 | `preview_expired` | 409 | Apply with a token older than 10 minutes — preview again |
@@ -105,11 +105,11 @@ Updated in the same PR that implements an endpoint.
 | `POST /api/auth/register` | US-01 | implemented |
 | `POST /api/auth/login` | US-01 | implemented |
 | `GET /api/me` | US-01 | implemented |
-| `GET /api/projects` | US-02 | `501` |
-| `POST /api/projects` | US-02 | `501` |
-| `GET /api/projects/{project_id}` | US-02 | `501` |
-| `GET /api/invites/{code}` | US-03 | `501` |
-| `POST /api/invites/{code}/join` | US-03 | `501` |
+| `GET /api/projects` | US-02 | implemented |
+| `POST /api/projects` | US-02 | implemented |
+| `GET /api/projects/{project_id}` | US-02 | implemented |
+| `GET /api/invites/{code}` | US-03 | implemented |
+| `POST /api/invites/{code}/join` | US-03 | implemented |
 | `GET /api/projects/{project_id}/participants` | US-06 | `501` |
 | `POST /api/projects/{project_id}/participants` | US-06 | `501` |
 | `GET /api/projects/{project_id}/days` | US-04 | `501` |
@@ -366,7 +366,9 @@ Errors: `404 invite_not_found`.
   and keeps the role the producer gave it. `200`: **Participant**.
 
 Errors: `404 invite_not_found`, `422 validation_failed` (role missing or
-`producer`).
+`producer`), `409 participant_email_taken` (someone else in the project is
+already linked to an account with your email — should not happen while emails
+are unique per account, but the server refuses rather than guesses).
 
 ---
 

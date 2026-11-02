@@ -47,7 +47,11 @@ client/
     mock/             fixture data for offline development
 docs/
   api.md              the API contract — source of truth, update it first
+  architecture.md     how it all fits: layers, schema, auth, impact flow, hosting
 ```
+
+Read `docs/architecture.md` before starting a feature. Its decisions table (§8)
+records why things are the way they are.
 
 ## Domain model
 
@@ -68,6 +72,16 @@ Plus:
   a pointer on `material`, old versions are kept.
 - `task` — assignee, due date, optional shooting_day_id.
 
+Added for the MVP (see `docs/architecture.md` §3):
+
+- `app_user` — an account. Separate from `participant`: one person is in many
+  projects, and a participant may have no account at all (cast added by name).
+- `shooting_day_participant` — people on set for the whole day, not tied to a
+  scene. The "assigned directly to the day" half of the impact rule.
+- `notification` — in-app notice to one participant about one change event.
+
+`material`, `material_version` and `task` are **not** in the MVP schema.
+
 **Rules:**
 
 - All IDs are UUID v4.
@@ -75,6 +89,8 @@ Plus:
   `Asia/Almaty` for display only, never in the database.
 - Call times are wall-clock times on a date, not instants. Store as `date` +
   `time`, not a single timestamp.
+- A shooting day's date, call time and location change **only** through
+  `/api/changes/apply`. Never add a PATCH for them — it would bypass the preview.
 
 ## The impact view — how it works
 

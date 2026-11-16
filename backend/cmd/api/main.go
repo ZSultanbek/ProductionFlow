@@ -65,6 +65,7 @@ func run() error {
 			DB:           db,
 			Users:        db,
 			Projects:     db,
+			Days:         db,
 			Tokens:       auth.NewTokens(cfg.JWTSecret, cfg.JWTTTL),
 			Build:        apihttp.BuildInfo{Version: version, Commit: commit, BuiltAt: builtAt},
 			Logger:       logger,

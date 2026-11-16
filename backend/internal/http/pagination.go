@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/ZSultanbek/ProductionFlow/backend/internal/domain"
-	"github.com/ZSultanbek/ProductionFlow/backend/internal/store"
 )
 
 const (
@@ -23,32 +22,40 @@ type listResponse[T any] struct {
 	NextCursor *string `json:"next_cursor"`
 }
 
-// cursorJSON is what an opaque cursor decodes to. Clients must not build or
-// parse it — docs/api.md says so — which leaves us free to change it.
-type cursorJSON struct {
+// A cursor is the position of the last item on a page: base64 of a small JSON
+// object. Clients must not build or parse it — docs/api.md says so — which
+// leaves us free to change what is inside. Each list has its own cursor struct
+// matching the columns that list is ordered by.
+//
+// A cursor arrives from the outside, so every field is checked before it gets
+// anywhere near SQL: see the valid() methods.
+
+// projectCursor: projects are ordered by created_at, id (newest first).
+type projectCursor struct {
 	CreatedAt time.Time `json:"t"`
 	ID        string    `json:"id"`
 }
 
-func encodeCursor(k store.Keyset) string {
-	raw, _ := json.Marshal(cursorJSON{CreatedAt: k.CreatedAt, ID: k.ID})
+func (c projectCursor) valid() bool { return !c.CreatedAt.IsZero() && isUUID(c.ID) }
+
+// dayCursor: days are ordered by shoot_date, call_time, id.
+type dayCursor struct {
+	ShootDate string `json:"d"`
+	CallTime  string `json:"c"`
+	ID        string `json:"id"`
+}
+
+func (c dayCursor) valid() bool {
+	return domain.IsDate(c.ShootDate) && domain.IsCallTime(c.CallTime) && isUUID(c.ID)
+}
+
+func encodeCursor(c any) string {
+	raw, _ := json.Marshal(c)
 	return base64.RawURLEncoding.EncodeToString(raw)
 }
 
-func decodeCursor(s string) (store.Keyset, bool) {
-	raw, err := base64.RawURLEncoding.DecodeString(s)
-	if err != nil {
-		return store.Keyset{}, false
-	}
-	var c cursorJSON
-	if err := json.Unmarshal(raw, &c); err != nil || c.ID == "" || c.CreatedAt.IsZero() {
-		return store.Keyset{}, false
-	}
-	return store.Keyset{CreatedAt: c.CreatedAt, ID: c.ID}, true
-}
-
 // parsePage reads ?cursor= and ?limit=. after is nil for the first page.
-func parsePage(r *http.Request) (after *store.Keyset, limit int, errs domain.FieldErrors) {
+func parsePage[C interface{ valid() bool }](r *http.Request) (after *C, limit int, errs domain.FieldErrors) {
 	q := r.URL.Query()
 	errs = domain.FieldErrors{}
 	limit = defaultPageSize
@@ -63,11 +70,12 @@ func parsePage(r *http.Request) (after *store.Keyset, limit int, errs domain.Fie
 	}
 
 	if raw := q.Get("cursor"); raw != "" {
-		k, ok := decodeCursor(raw)
-		if !ok {
+		var c C
+		decoded, err := base64.RawURLEncoding.DecodeString(raw)
+		if err != nil || json.Unmarshal(decoded, &c) != nil || !c.valid() {
 			errs["cursor"] = "is not a cursor this API issued"
 		} else {
-			after = &k
+			after = &c
 		}
 	}
 
@@ -76,11 +84,11 @@ func parsePage(r *http.Request) (after *store.Keyset, limit int, errs domain.Fie
 
 // page trims a result fetched with limit+1 rows down to limit, and returns the
 // cursor for the next page if the extra row proved there is one.
-func page[T any](items []T, limit int, keyOf func(T) store.Keyset) ([]T, *string) {
+func page[T any](items []T, limit int, cursorOf func(T) any) ([]T, *string) {
 	if len(items) <= limit {
 		return items, nil
 	}
 	items = items[:limit]
-	next := encodeCursor(keyOf(items[limit-1]))
+	next := encodeCursor(cursorOf(items[limit-1]))
 	return items, &next
 }

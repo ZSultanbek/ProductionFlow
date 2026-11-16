@@ -21,10 +21,12 @@ type fakePinger struct{ err error }
 func (f fakePinger) Ping(context.Context) error { return f.err }
 
 func testDeps(pingErr error) Deps {
+	projects := newFakeProjects()
 	return Deps{
 		DB:           fakePinger{err: pingErr},
 		Users:        newFakeUsers(),
-		Projects:     newFakeProjects(),
+		Projects:     projects,
+		Days:         newFakeDays(projects),
 		Tokens:       auth.NewTokens([]byte("test-secret-test-secret-test-secret"), time.Hour),
 		Build:        BuildInfo{Version: "test", Commit: "abc1234", BuiltAt: "2026-01-01T00:00:00Z"},
 		Logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),

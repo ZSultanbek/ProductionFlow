@@ -477,29 +477,38 @@ Riverpod, kept boring:
 ```
 /                              landing (public)
 /login, /register              auth (public)
-/join/:code                    invite landing → login/register if needed → pick role
-/app                           today: call sheet for today or next day (US-05)
+/join/:code                    invite landing (public) → log in or register if needed → pick role
+/app                           today: call sheets for today or the next shooting date (US-05)
+/app/projects                  project list, create, "join with invite" (US-02, US-03)
+/app/projects/:projectId       one project: days, invite link, add a day (US-04)
+/app/projects/:projectId/days/:dayId      the call sheet (US-05)
+
+planned with R2 and R3:
+/app/projects/:projectId/scenes           all scenes incl. unscheduled (US-06)
 /app/schedule                  my schedule (US-10)
 /app/notifications             notifications (US-09)
-/app/projects                  project list + create (US-02)
-/app/projects/:projectId       days list · change feed · people (tabs)
-/app/projects/:projectId/days/:dayId      call sheet + scenes; producer edits here
-/app/projects/:projectId/scenes           all scenes incl. unscheduled (US-06)
 ```
 
 A `redirect` in go_router sends logged-out users from `/app/**` to `/login`, and
-remembers where they were going — including `/join/:code`, so following an invite
-link while logged out ends up back on the join screen after registering.
+remembers where they were going in a `from` parameter — including `/join/:code`,
+so following an invite link while logged out ends up back on the join screen
+after registering. `from` is only honoured if it is a path inside the app.
+
+Nothing navigates by hand after a login or logout: the session changes, the
+router is told (`refreshListenable`), and the redirect does the rest.
 
 On Android an invite is opened as a web link; deep-linking into the installed app
-(Android App Links) is out of scope. The join screen also accepts a pasted code.
+(Android App Links) is out of scope. "Join with invite" on the project list
+accepts a pasted link or code instead.
 
 ### 5.5 Session
 
-`flutter_secure_storage` holds the token: Android Keystore on the phone,
-browser storage on the web. On the web that is not protected against XSS —
-acceptable for a course MVP with no third-party scripts, and worth one line in the
-risk register.
+`shared_preferences` holds the token and the user's name: app-private storage on
+Android, `localStorage` in the browser. Neither is encrypted at rest, and on the
+web it is not protected against XSS — acceptable for a course MVP with no
+third-party scripts and a token that expires in 7 days, and worth one line in the
+risk register. It sits behind a small `SessionStore` interface
+(`core/session.dart`), so moving to the Android Keystore later is one new class.
 
 ### 5.6 Dates and times — the trap
 
@@ -514,8 +523,12 @@ zone.
 
 | Package | Why |
 | --- | --- |
-| `json_annotation` + dev: `json_serializable`, `build_runner` | Already named in CLAUDE.md; typed models instead of `Map` lookups |
-| `flutter_secure_storage` | Token storage on Android and web |
+| `shared_preferences` | Keeps the session between launches. First-party plugin from the Flutter team |
+| `flutter_web_plugins` (part of the SDK) | `usePathUrlStrategy()`, so invite links are `/join/abc`, not `/#/join/abc` |
+
+Models are typed classes with **hand-written `fromJson`** in `core/models.dart`,
+not `json_serializable`: a dozen small classes do not justify a code generator,
+generated files, and an extra build step in CI and the Docker image.
 
 Android release builds need `<uses-permission android:name="android.permission.INTERNET"/>`
 in `android/app/src/main/AndroidManifest.xml` — the Flutter template only adds it
@@ -736,6 +749,8 @@ reconstruct the reasoning from chat history.
 | D8 | "Today" is sent by the client | Server computes today in `Asia/Almaty` | The server should not assume a time zone; the phone knows |
 | D9 | JWT, 7 days, no refresh | Short JWT + refresh token; server sessions | Simplest thing that is safe enough; CLAUDE.md already rules out refresh for the MVP |
 | D10 | Notifications in-app only for the MVP | Email via a transactional provider | No external account, no deliverability problems. Email can be added in R3 if time allows |
+| D11 | Hand-written `fromJson`, no `json_serializable` | Code generation with `build_runner` | About a dozen small models; no generated files to keep in sync, no build step added to CI and the client Dockerfile |
+| D12 | Session in `shared_preferences`, behind a `SessionStore` interface | `flutter_secure_storage` (Android Keystore) | First-party plugin that tracks current Flutter and Android tooling; the token is short-lived and low-value. The interface keeps the swap cheap |
 
 ---
 

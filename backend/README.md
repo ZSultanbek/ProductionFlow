@@ -126,8 +126,11 @@ All optional — the defaults target the compose Postgres.
 | `DATABASE_URL` | `postgres://productionflow:productionflow@localhost:5432/productionflow?sslmode=disable` | libpq connection string |
 | `POSTGRES_PORT` | `5432` | Make/compose only, not read by the API. Host port for the compose Postgres. |
 | `API_ADDR` | `:8080` | Listen address |
-| `APP_ENV` | `dev` | `dev` logs text, anything else logs JSON |
+| `APP_ENV` | `dev` | `dev` logs text, anything else logs JSON and requires `JWT_SECRET` |
 | `SHUTDOWN_TIMEOUT_SECONDS` | `10` | Grace period for in-flight requests |
+| `JWT_SECRET` | a public dev-only value | Signs access tokens. **Required outside dev**, at least 32 bytes: `openssl rand -base64 48` |
+| `JWT_TTL_HOURS` | `168` | Access token lifetime (7 days). No refresh flow in the MVP |
+| `PUBLIC_WEB_URL` | `http://localhost:3000` | Where the web app lives; invite links are `{PUBLIC_WEB_URL}/join/{code}` |
 
 ## Layout
 
@@ -137,7 +140,7 @@ internal/config/     environment parsing with defaults
 internal/domain/     entities + rules, including the impact computation. No SQL, no HTTP.
 internal/store/      pgx pool and queries, one file per aggregate. No rules.
 internal/http/       routes, handlers, middleware, DTOs. No rules, no SQL.
-internal/auth/       JWT + password hashing (not implemented)
+internal/auth/       bcrypt password hashing + HS256 access tokens
 migrations/          golang-migrate pairs, forward-only in practice
 ```
 

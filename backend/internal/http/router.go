@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+
+	"github.com/ZSultanbek/ProductionFlow/backend/internal/auth"
 )
 
 // Pinger is the slice of store.DB this package needs. Depending on the interface
@@ -21,9 +23,35 @@ type BuildInfo struct {
 
 // Deps is everything the handlers need, passed in from cmd/api.
 type Deps struct {
-	DB     Pinger
-	Build  BuildInfo
-	Logger *slog.Logger
+	DB       Pinger
+	Users    UserStore
+	Projects ProjectStore
+	Days     DayStore
+	Tokens   *auth.Tokens
+	Build    BuildInfo
+	Logger   *slog.Logger
+	// PublicWebURL is the web app's base URL, used to build invite links.
+	PublicWebURL string
+}
+
+// notYetImplemented is every route in docs/api.md that has no handler yet. Each
+// returns 501 so the client can point at a real server and get a parseable
+// envelope. Move a line out of here when its handler lands, and update the
+// Status table in docs/api.md in the same PR.
+var notYetImplemented = []string{
+	"GET /api/projects/{project_id}/participants",
+	"POST /api/projects/{project_id}/participants",
+	"PUT /api/days/{day_id}/participants",
+	"GET /api/projects/{project_id}/scenes",
+	"POST /api/projects/{project_id}/scenes",
+	"PATCH /api/scenes/{scene_id}",
+	"PUT /api/scenes/{scene_id}/participants",
+	"POST /api/changes/preview",
+	"POST /api/changes/apply",
+	"GET /api/projects/{project_id}/changes",
+	"GET /api/me/schedule",
+	"GET /api/me/notifications",
+	"POST /api/me/notifications/{notification_id}/read",
 }
 
 // NewRouter registers the routes and wraps them in the middleware chain.
@@ -31,17 +59,27 @@ type Deps struct {
 func NewRouter(deps Deps) http.Handler {
 	mux := http.NewServeMux()
 
+	// Public.
 	mux.HandleFunc("GET /api/health", handleHealth(deps))
+	mux.HandleFunc("POST /api/auth/register", handleRegister(deps))
+	mux.HandleFunc("POST /api/auth/login", handleLogin(deps))
+	mux.HandleFunc("GET /api/invites/{code}", handleGetInvite(deps))
 
-	// Contracted in docs/api.md, not implemented yet. Each of these returns 501.
-	for _, pattern := range []string{
-		"GET /api/projects",
-		"POST /api/projects",
-		"GET /api/days",
-		"POST /api/days",
-		"POST /api/changes/preview",
-		"POST /api/changes/apply",
-	} {
+	// Logged in. Every new route goes below this line, wrapped in requireAuth,
+	// unless docs/api.md marks it *public*.
+	mux.HandleFunc("GET /api/me", requireAuth(deps, handleMe(deps)))
+
+	mux.HandleFunc("GET /api/projects", requireAuth(deps, handleListProjects(deps)))
+	mux.HandleFunc("POST /api/projects", requireAuth(deps, handleCreateProject(deps)))
+	mux.HandleFunc("GET /api/projects/{project_id}", requireAuth(deps, handleGetProject(deps)))
+	mux.HandleFunc("POST /api/invites/{code}/join", requireAuth(deps, handleJoinInvite(deps)))
+
+	mux.HandleFunc("GET /api/projects/{project_id}/days", requireAuth(deps, handleListDays(deps)))
+	mux.HandleFunc("POST /api/projects/{project_id}/days", requireAuth(deps, handleCreateDay(deps)))
+	mux.HandleFunc("GET /api/days/{day_id}", requireAuth(deps, handleGetDay(deps)))
+	mux.HandleFunc("GET /api/me/today", requireAuth(deps, handleToday(deps)))
+
+	for _, pattern := range notYetImplemented {
 		mux.HandleFunc(pattern, notImplemented)
 	}
 

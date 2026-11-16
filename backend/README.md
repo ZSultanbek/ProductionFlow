@@ -130,6 +130,7 @@ All optional — the defaults target the compose Postgres.
 | `SHUTDOWN_TIMEOUT_SECONDS` | `10` | Grace period for in-flight requests |
 | `JWT_SECRET` | a public dev-only value | Signs access tokens. **Required outside dev**, at least 32 bytes: `openssl rand -base64 48` |
 | `JWT_TTL_HOURS` | `168` | Access token lifetime (7 days). No refresh flow in the MVP |
+| `PUBLIC_WEB_URL` | `http://localhost:3000` | Where the web app lives; invite links are `{PUBLIC_WEB_URL}/join/{code}` |
 
 ## Layout
 

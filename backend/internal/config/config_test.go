@@ -12,7 +12,7 @@ func clearEnv(t *testing.T) {
 	t.Helper()
 	for _, key := range []string{
 		"API_ADDR", "DATABASE_URL", "APP_ENV", "SHUTDOWN_TIMEOUT_SECONDS",
-		"JWT_SECRET", "JWT_TTL_HOURS",
+		"JWT_SECRET", "JWT_TTL_HOURS", "PUBLIC_WEB_URL",
 	} {
 		t.Setenv(key, "")
 	}
@@ -77,5 +77,22 @@ func TestLoadRejectsBadTTL(t *testing.T) {
 
 	if _, err := Load(); err == nil {
 		t.Fatal("accepted a non-numeric JWT_TTL_HOURS")
+	}
+}
+
+func TestLoadPublicWebURL(t *testing.T) {
+	clearEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.PublicWebURL != "http://localhost:3000" {
+		t.Errorf("default = %q", cfg.PublicWebURL)
+	}
+
+	// A trailing slash would produce invite links with "//join".
+	t.Setenv("PUBLIC_WEB_URL", "https://productionflow.pages.dev/")
+	if cfg, _ = Load(); cfg.PublicWebURL != "https://productionflow.pages.dev" {
+		t.Errorf("trailing slash not trimmed: %q", cfg.PublicWebURL)
 	}
 }

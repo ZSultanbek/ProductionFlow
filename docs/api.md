@@ -69,7 +69,7 @@ The reasoning behind the shapes below is in [`architecture.md`](architecture.md)
 | `invite_not_found` | 404 | No project with that invite code |
 | `notification_not_found` | 404 | No such notification for you |
 | `email_taken` | 409 | Register with an email that already has an account |
-| `participant_email_taken` | 409 | Adding a participant whose email is already in the project |
+| `participant_email_taken` | 409 | Adding a participant whose email is already in the project, or joining when your email belongs to someone else there |
 | `scene_number_taken` | 409 | Scene number already used in this project |
 | `preview_stale` | 409 | Apply after the day or its affected people changed — preview again |
 | `preview_expired` | 409 | Apply with a token older than 10 minutes — preview again |
@@ -105,16 +105,16 @@ Updated in the same PR that implements an endpoint.
 | `POST /api/auth/register` | US-01 | implemented |
 | `POST /api/auth/login` | US-01 | implemented |
 | `GET /api/me` | US-01 | implemented |
-| `GET /api/projects` | US-02 | `501` |
-| `POST /api/projects` | US-02 | `501` |
-| `GET /api/projects/{project_id}` | US-02 | `501` |
-| `GET /api/invites/{code}` | US-03 | `501` |
-| `POST /api/invites/{code}/join` | US-03 | `501` |
+| `GET /api/projects` | US-02 | implemented |
+| `POST /api/projects` | US-02 | implemented |
+| `GET /api/projects/{project_id}` | US-02 | implemented |
+| `GET /api/invites/{code}` | US-03 | implemented |
+| `POST /api/invites/{code}/join` | US-03 | implemented |
 | `GET /api/projects/{project_id}/participants` | US-06 | `501` |
 | `POST /api/projects/{project_id}/participants` | US-06 | `501` |
-| `GET /api/projects/{project_id}/days` | US-04 | `501` |
-| `POST /api/projects/{project_id}/days` | US-04 | `501` |
-| `GET /api/days/{day_id}` | US-05 | `501` |
+| `GET /api/projects/{project_id}/days` | US-04 | implemented |
+| `POST /api/projects/{project_id}/days` | US-04 | implemented |
+| `GET /api/days/{day_id}` | US-05 | implemented |
 | `PUT /api/days/{day_id}/participants` | US-06 | `501` |
 | `GET /api/projects/{project_id}/scenes` | US-06 | `501` |
 | `POST /api/projects/{project_id}/scenes` | US-06 | `501` |
@@ -123,7 +123,7 @@ Updated in the same PR that implements an endpoint.
 | `POST /api/changes/preview` | US-07 | `501` |
 | `POST /api/changes/apply` | US-08 | `501` |
 | `GET /api/projects/{project_id}/changes` | US-08 | `501` |
-| `GET /api/me/today` | US-05 | `501` |
+| `GET /api/me/today` | US-05 | implemented |
 | `GET /api/me/schedule` | US-10 | `501` |
 | `GET /api/me/notifications` | US-09 | `501` |
 | `POST /api/me/notifications/{notification_id}/read` | US-09 | `501` |
@@ -366,7 +366,9 @@ Errors: `404 invite_not_found`.
   and keeps the role the producer gave it. `200`: **Participant**.
 
 Errors: `404 invite_not_found`, `422 validation_failed` (role missing or
-`producer`).
+`producer`), `409 participant_email_taken` (someone else in the project is
+already linked to an account with your email — should not happen while emails
+are unique per account, but the server refuses rather than guesses).
 
 ---
 
@@ -406,6 +408,8 @@ Any member. Ordered by `shoot_date`, then `call_time`. Optional
 
 `200`: `{ "data": [ShootingDay], "next_cursor": null }`.
 
+Errors: `422 validation_failed` (`from`, `limit` or `cursor`), `404 project_not_found`.
+
 ### POST /api/projects/{project_id}/days
 
 *Producer only.*
@@ -418,6 +422,8 @@ Any member. Ordered by `shoot_date`, then `call_time`. Optional
 allowed — a production can run two units.
 
 Errors: `422 validation_failed`, `403 forbidden`, `404 project_not_found`.
+Permission is checked before the body: a crew member gets `403` whatever they
+send.
 
 ### GET /api/days/{day_id}
 
@@ -446,6 +452,10 @@ The call sheet. Any member.
   ]
 }
 ```
+
+Until the US-06 endpoints exist there is no way to add scenes or put people on
+set through the API, so `scenes` and `on_set_all_day` are `[]` for every day
+created so far. They are never `null`.
 
 Errors: `404 day_not_found`.
 

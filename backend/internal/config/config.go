@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -32,6 +33,9 @@ type Config struct {
 	// JWTTTL is how long an access token stays valid. No refresh flow in the
 	// MVP, so this is also how long until the user has to log in again.
 	JWTTTL time.Duration
+	// PublicWebURL is where the Flutter web app is served, without a trailing
+	// slash. Invite links are built from it: {PublicWebURL}/join/{code}.
+	PublicWebURL string
 }
 
 // Load reads the environment. A missing value takes its default; a value that
@@ -45,6 +49,7 @@ func Load() (Config, error) {
 		ShutdownTimeout: 10 * time.Second,
 		Env:             envString("APP_ENV", "dev"),
 		JWTTTL:          7 * 24 * time.Hour,
+		PublicWebURL:    strings.TrimRight(envString("PUBLIC_WEB_URL", "http://localhost:3000"), "/"),
 	}
 
 	if raw := os.Getenv("SHUTDOWN_TIMEOUT_SECONDS"); raw != "" {

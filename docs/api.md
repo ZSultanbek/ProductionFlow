@@ -112,9 +112,9 @@ Updated in the same PR that implements an endpoint.
 | `POST /api/invites/{code}/join` | US-03 | implemented |
 | `GET /api/projects/{project_id}/participants` | US-06 | `501` |
 | `POST /api/projects/{project_id}/participants` | US-06 | `501` |
-| `GET /api/projects/{project_id}/days` | US-04 | `501` |
-| `POST /api/projects/{project_id}/days` | US-04 | `501` |
-| `GET /api/days/{day_id}` | US-05 | `501` |
+| `GET /api/projects/{project_id}/days` | US-04 | implemented |
+| `POST /api/projects/{project_id}/days` | US-04 | implemented |
+| `GET /api/days/{day_id}` | US-05 | implemented |
 | `PUT /api/days/{day_id}/participants` | US-06 | `501` |
 | `GET /api/projects/{project_id}/scenes` | US-06 | `501` |
 | `POST /api/projects/{project_id}/scenes` | US-06 | `501` |
@@ -123,7 +123,7 @@ Updated in the same PR that implements an endpoint.
 | `POST /api/changes/preview` | US-07 | `501` |
 | `POST /api/changes/apply` | US-08 | `501` |
 | `GET /api/projects/{project_id}/changes` | US-08 | `501` |
-| `GET /api/me/today` | US-05 | `501` |
+| `GET /api/me/today` | US-05 | implemented |
 | `GET /api/me/schedule` | US-10 | `501` |
 | `GET /api/me/notifications` | US-09 | `501` |
 | `POST /api/me/notifications/{notification_id}/read` | US-09 | `501` |
@@ -408,6 +408,8 @@ Any member. Ordered by `shoot_date`, then `call_time`. Optional
 
 `200`: `{ "data": [ShootingDay], "next_cursor": null }`.
 
+Errors: `422 validation_failed` (`from`, `limit` or `cursor`), `404 project_not_found`.
+
 ### POST /api/projects/{project_id}/days
 
 *Producer only.*
@@ -420,6 +422,8 @@ Any member. Ordered by `shoot_date`, then `call_time`. Optional
 allowed — a production can run two units.
 
 Errors: `422 validation_failed`, `403 forbidden`, `404 project_not_found`.
+Permission is checked before the body: a crew member gets `403` whatever they
+send.
 
 ### GET /api/days/{day_id}
 
@@ -448,6 +452,10 @@ The call sheet. Any member.
   ]
 }
 ```
+
+Until the US-06 endpoints exist there is no way to add scenes or put people on
+set through the API, so `scenes` and `on_set_all_day` are `[]` for every day
+created so far. They are never `null`.
 
 Errors: `404 day_not_found`.
 

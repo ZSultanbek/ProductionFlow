@@ -26,6 +26,7 @@ type Deps struct {
 	DB       Pinger
 	Users    UserStore
 	Projects ProjectStore
+	Days     DayStore
 	Tokens   *auth.Tokens
 	Build    BuildInfo
 	Logger   *slog.Logger
@@ -40,9 +41,6 @@ type Deps struct {
 var notYetImplemented = []string{
 	"GET /api/projects/{project_id}/participants",
 	"POST /api/projects/{project_id}/participants",
-	"GET /api/projects/{project_id}/days",
-	"POST /api/projects/{project_id}/days",
-	"GET /api/days/{day_id}",
 	"PUT /api/days/{day_id}/participants",
 	"GET /api/projects/{project_id}/scenes",
 	"POST /api/projects/{project_id}/scenes",
@@ -51,7 +49,6 @@ var notYetImplemented = []string{
 	"POST /api/changes/preview",
 	"POST /api/changes/apply",
 	"GET /api/projects/{project_id}/changes",
-	"GET /api/me/today",
 	"GET /api/me/schedule",
 	"GET /api/me/notifications",
 	"POST /api/me/notifications/{notification_id}/read",
@@ -76,6 +73,11 @@ func NewRouter(deps Deps) http.Handler {
 	mux.HandleFunc("POST /api/projects", requireAuth(deps, handleCreateProject(deps)))
 	mux.HandleFunc("GET /api/projects/{project_id}", requireAuth(deps, handleGetProject(deps)))
 	mux.HandleFunc("POST /api/invites/{code}/join", requireAuth(deps, handleJoinInvite(deps)))
+
+	mux.HandleFunc("GET /api/projects/{project_id}/days", requireAuth(deps, handleListDays(deps)))
+	mux.HandleFunc("POST /api/projects/{project_id}/days", requireAuth(deps, handleCreateDay(deps)))
+	mux.HandleFunc("GET /api/days/{day_id}", requireAuth(deps, handleGetDay(deps)))
+	mux.HandleFunc("GET /api/me/today", requireAuth(deps, handleToday(deps)))
 
 	for _, pattern := range notYetImplemented {
 		mux.HandleFunc(pattern, notImplemented)

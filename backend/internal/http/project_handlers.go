@@ -49,8 +49,8 @@ func toProjectJSON(m domain.Membership, publicWebURL string) projectJSON {
 	return out
 }
 
-func membershipKey(m domain.Membership) store.Keyset {
-	return store.Keyset{CreatedAt: m.Project.CreatedAt, ID: m.Project.ID}
+func membershipCursor(m domain.Membership) any {
+	return projectCursor{CreatedAt: m.Project.CreatedAt, ID: m.Project.ID}
 }
 
 // --- handlers ---
@@ -58,10 +58,14 @@ func membershipKey(m domain.Membership) store.Keyset {
 // handleListProjects: GET /api/projects — the caller's projects, newest first.
 func handleListProjects(deps Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		after, limit, fieldErrs := parsePage(r)
+		cursor, limit, fieldErrs := parsePage[projectCursor](r)
 		if len(fieldErrs) > 0 {
 			writeValidationError(w, fieldErrs)
 			return
+		}
+		var after *store.Keyset
+		if cursor != nil {
+			after = &store.Keyset{CreatedAt: cursor.CreatedAt, ID: cursor.ID}
 		}
 
 		list, err := deps.Projects.ProjectsForUser(r.Context(), userIDFrom(r.Context()), after, limit+1)
@@ -70,7 +74,7 @@ func handleListProjects(deps Deps) http.HandlerFunc {
 			return
 		}
 
-		list, next := page(list, limit, membershipKey)
+		list, next := page(list, limit, membershipCursor)
 		data := make([]projectJSON, 0, len(list))
 		for _, m := range list {
 			data = append(data, toProjectJSON(m, deps.PublicWebURL))
@@ -111,17 +115,43 @@ func handleCreateProject(deps Deps) http.HandlerFunc {
 // handleGetProject: GET /api/projects/{project_id}.
 func handleGetProject(deps Deps) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		m, err := deps.Projects.ProjectForUser(r.Context(), userIDFrom(r.Context()), r.PathValue("project_id"))
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "project_not_found", "no such project")
-			return
-		}
-		if err != nil {
-			writeInternalError(w, deps.Logger, "get project", err)
+		m, ok := memberOf(w, r, deps, r.PathValue("project_id"))
+		if !ok {
 			return
 		}
 		writeJSON(w, http.StatusOK, toProjectJSON(m, deps.PublicWebURL))
 	}
+}
+
+// memberOf loads the caller's membership of a project. Every project-scoped
+// handler starts with it. Not a member, no such project, or a malformed id all
+// get the same 404 — we do not confirm a project exists to people outside it.
+// On false a response has been written.
+func memberOf(w http.ResponseWriter, r *http.Request, deps Deps, projectID string) (domain.Membership, bool) {
+	m, err := deps.Projects.ProjectForUser(r.Context(), userIDFrom(r.Context()), projectID)
+	if errors.Is(err, store.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "project_not_found", "no such project")
+		return domain.Membership{}, false
+	}
+	if err != nil {
+		writeInternalError(w, deps.Logger, "load membership", err)
+		return domain.Membership{}, false
+	}
+	return m, true
+}
+
+// producerOf is memberOf plus the role check for writes: members who are not
+// producers get 403, because they already know the project exists.
+func producerOf(w http.ResponseWriter, r *http.Request, deps Deps, projectID string) (domain.Membership, bool) {
+	m, ok := memberOf(w, r, deps, projectID)
+	if !ok {
+		return domain.Membership{}, false
+	}
+	if m.Role != domain.RoleProducer {
+		writeError(w, http.StatusForbidden, "forbidden", "only a producer of this project can do that")
+		return domain.Membership{}, false
+	}
+	return m, true
 }
 
 // currentUser loads the caller's account. A valid token whose account has been

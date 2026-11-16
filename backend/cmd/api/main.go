@@ -70,6 +70,10 @@ func run() error {
 			Build:        apihttp.BuildInfo{Version: version, Commit: commit, BuiltAt: builtAt},
 			Logger:       logger,
 			PublicWebURL: cfg.PublicWebURL,
+			CORS: apihttp.CORS{
+				AllowedOrigins: cfg.CORSAllowedOrigins,
+				AllowLocalhost: cfg.CORSAllowLocalhost,
+			},
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,

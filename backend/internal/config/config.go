@@ -36,6 +36,12 @@ type Config struct {
 	// PublicWebURL is where the Flutter web app is served, without a trailing
 	// slash. Invite links are built from it: {PublicWebURL}/join/{code}.
 	PublicWebURL string
+	// CORSAllowedOrigins are the browser origins allowed to call the API when
+	// the web app is served from somewhere else (Cloudflare Pages in prod).
+	CORSAllowedOrigins []string
+	// CORSAllowLocalhost admits http://localhost on any port. True only in dev,
+	// where `flutter run -d chrome` picks a new port every run.
+	CORSAllowLocalhost bool
 }
 
 // Load reads the environment. A missing value takes its default; a value that
@@ -50,6 +56,15 @@ func Load() (Config, error) {
 		Env:             envString("APP_ENV", "dev"),
 		JWTTTL:          7 * 24 * time.Hour,
 		PublicWebURL:    strings.TrimRight(envString("PUBLIC_WEB_URL", "http://localhost:3000"), "/"),
+	}
+
+	cfg.CORSAllowLocalhost = cfg.Env == "dev"
+	for _, origin := range strings.Split(os.Getenv("CORS_ALLOWED_ORIGINS"), ",") {
+		// Browsers send origins without a trailing slash; a configured one with
+		// a slash would silently never match.
+		if origin = strings.TrimRight(strings.TrimSpace(origin), "/"); origin != "" {
+			cfg.CORSAllowedOrigins = append(cfg.CORSAllowedOrigins, origin)
+		}
 	}
 
 	if raw := os.Getenv("SHUTDOWN_TIMEOUT_SECONDS"); raw != "" {

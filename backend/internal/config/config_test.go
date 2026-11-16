@@ -12,7 +12,7 @@ func clearEnv(t *testing.T) {
 	t.Helper()
 	for _, key := range []string{
 		"API_ADDR", "DATABASE_URL", "APP_ENV", "SHUTDOWN_TIMEOUT_SECONDS",
-		"JWT_SECRET", "JWT_TTL_HOURS", "PUBLIC_WEB_URL",
+		"JWT_SECRET", "JWT_TTL_HOURS", "PUBLIC_WEB_URL", "CORS_ALLOWED_ORIGINS",
 	} {
 		t.Setenv(key, "")
 	}
@@ -94,5 +94,33 @@ func TestLoadPublicWebURL(t *testing.T) {
 	t.Setenv("PUBLIC_WEB_URL", "https://productionflow.pages.dev/")
 	if cfg, _ = Load(); cfg.PublicWebURL != "https://productionflow.pages.dev" {
 		t.Errorf("trailing slash not trimmed: %q", cfg.PublicWebURL)
+	}
+}
+
+func TestLoadCORS(t *testing.T) {
+	clearEnv(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.CORSAllowLocalhost || len(cfg.CORSAllowedOrigins) != 0 {
+		t.Errorf("dev defaults: localhost=%v origins=%v; want localhost allowed, no origins",
+			cfg.CORSAllowLocalhost, cfg.CORSAllowedOrigins)
+	}
+
+	t.Setenv("APP_ENV", "prod")
+	t.Setenv("JWT_SECRET", strings.Repeat("s", 48))
+	t.Setenv("CORS_ALLOWED_ORIGINS", " https://productionflow.pages.dev/ , https://example.kz,, ")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Localhost must never be open in production.
+	if cfg.CORSAllowLocalhost {
+		t.Error("prod allows localhost origins")
+	}
+	want := []string{"https://productionflow.pages.dev", "https://example.kz"}
+	if len(cfg.CORSAllowedOrigins) != 2 || cfg.CORSAllowedOrigins[0] != want[0] || cfg.CORSAllowedOrigins[1] != want[1] {
+		t.Errorf("origins = %q, want %q", cfg.CORSAllowedOrigins, want)
 	}
 }

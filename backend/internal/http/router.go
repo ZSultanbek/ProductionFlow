@@ -32,6 +32,9 @@ type Deps struct {
 	Logger   *slog.Logger
 	// PublicWebURL is the web app's base URL, used to build invite links.
 	PublicWebURL string
+	// CORS lists the browser origins allowed to call the API. The zero value
+	// allows none, which is right whenever web and API share an origin.
+	CORS CORS
 }
 
 // notYetImplemented is every route in docs/api.md that has no handler yet. Each
@@ -85,5 +88,7 @@ func NewRouter(deps Deps) http.Handler {
 
 	mux.HandleFunc("/", handleNotFound)
 
-	return recoverPanic(deps.Logger)(requestLogger(deps.Logger)(mux))
+	// cors sits outside the mux so a preflight is answered before any route or
+	// requireAuth sees it, and inside the logger so preflights are logged too.
+	return recoverPanic(deps.Logger)(requestLogger(deps.Logger)(cors(deps.CORS)(mux)))
 }

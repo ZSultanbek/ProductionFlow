@@ -12,17 +12,26 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # Routing. Two routes today: "/" landing, "/app" shell.
+  # Routing, with the login redirects. See core/router.dart.
   go_router: ^18.0.2
 
-  # State. Wired up (ProviderScope is installed in main) but nothing uses it yet.
+  # State: the session, and the data each screen loads. See core/providers.dart.
   flutter_riverpod: ^3.4.3
 
-  # HTTP. Configured in core/api_client.dart but not called anywhere yet.
+  # HTTP. Used only by RealApi in core/api_client.dart.
   dio: ^5.11.1
 
   # Fraunces + Inter, the pairing defined in core/theme.dart.
   google_fonts: ^9.0.0
+
+  # Keeps the login session between launches: app-private storage on Android,
+  # localStorage in the browser. First-party plugin from the Flutter team.
+  shared_preferences: ^2.3.0
+
+  # Part of the Flutter SDK. Used once, in main.dart, for usePathUrlStrategy():
+  # real paths on the web (/join/abc) instead of /#/join/abc.
+  flutter_web_plugins:
+    sdk: flutter
 
 dev_dependencies:
   flutter_test:
@@ -33,5 +42,5 @@ flutter:
   uses-material-design: true
 
   assets:
-    # Fixture JSON, so the client runs with no backend. See core/mock/mock_api.dart.
+    # Fixture JSON for --dart-define=USE_MOCK=true. See core/mock/mock_api.dart.
     - lib/core/mock/fixtures/

@@ -2,21 +2,35 @@
   "data": [
     {
       "id": "d1111111-1111-4111-8111-111111111111",
-      "actor": { "id": "c3333333-3333-4333-8333-333333333333", "display_name": "Madina" },
+      "project_id": "6f1b5f4e-1c2a-4d3b-9e5f-0a1b2c3d4e5f",
+      "actor": {
+        "participant_id": "c3333333-3333-4333-8333-333333333333",
+        "display_name": "Madina"
+      },
       "entity_type": "shooting_day",
       "entity_id": "a1111111-1111-4111-8111-111111111111",
       "diff": {
-        "call_time": { "from": "08:00", "to": "07:30" }
+        "call_time": {
+          "from": "08:00",
+          "to": "07:30"
+        }
       },
       "created_at": "2026-09-29T14:12:00Z"
     },
     {
       "id": "d2222222-2222-4222-8222-222222222222",
-      "actor": { "id": "c2222222-2222-4222-8222-222222222222", "display_name": "Daniyar" },
+      "project_id": "6f1b5f4e-1c2a-4d3b-9e5f-0a1b2c3d4e5f",
+      "actor": {
+        "participant_id": "c3333333-3333-4333-8333-333333333333",
+        "display_name": "Madina"
+      },
       "entity_type": "scene",
       "entity_id": "b4444444-4444-4444-8444-444444444444",
       "diff": {
-        "shooting_day_id": { "from": "a2222222-2222-4222-8222-222222222222", "to": null }
+        "shooting_day_id": {
+          "from": "a2222222-2222-4222-8222-222222222222",
+          "to": null
+        }
       },
       "created_at": "2026-09-28T09:41:00Z"
     }

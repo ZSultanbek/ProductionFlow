@@ -4,9 +4,12 @@ Flutter app for ProductionFlow. **Android and web only** — `ios/`, `macos/`,
 `windows/` and `linux/` are deliberately not in this project, and iOS is out of
 scope per CLAUDE.md.
 
-This is the skeleton: two routes, the theme, and fixture data. No features yet.
+Release 1 is in: register and log in, projects, invite links, shooting days,
+the call sheet and the Today screen (US-01 to US-05).
 
 ## Run it
+
+Start the API first (`make dev` in `backend/`), then:
 
 ```sh
 flutter pub get
@@ -14,7 +17,19 @@ flutter run -d chrome          # web
 flutter run -d <device-id>     # android, see `flutter devices`
 ```
 
-Nothing calls the backend yet, so it runs with no Go server and no database.
+With nothing else set, the app looks for the API at `http://localhost:8080`, or
+at `http://10.0.2.2:8080` on the Android emulator (that is how the emulator
+reaches your machine). The API allows any `localhost` origin in dev, so
+`flutter run -d chrome` works without CORS setup.
+
+To run with **no server at all**, on fixture data:
+
+```sh
+flutter run -d chrome --dart-define=USE_MOCK=true
+```
+
+Any email and password log in, as the producer of a sample project. Useful for
+working on screens, and as a fallback if the demo server is asleep.
 
 ## Build
 
@@ -23,12 +38,15 @@ flutter build web --release
 flutter build apk --release
 ```
 
-To point a build at a real API:
+To point a build at a particular API:
 
 ```sh
-flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8080   # android emulator → host
-flutter run --dart-define=API_BASE_URL=http://localhost:8080  # web
+flutter run --dart-define=API_BASE_URL=http://192.168.1.20:8080      # a real phone → your machine's LAN address
+flutter build web --release --dart-define=API_BASE_URL=https://productionflow-api.onrender.com
 ```
+
+A release APK only talks `https`. Plain `http` is allowed in debug builds only
+(`android/app/src/debug/AndroidManifest.xml`).
 
 ## Docker
 
@@ -63,10 +81,10 @@ is 3.35.0, which cannot satisfy this project's `sdk: ^3.13.2`.
 
 ### Why there is no API hostname in the bundle
 
-`API_BASE_URL` defaults to empty, which means same-origin. The browser calls
-`/api/...` on port 3000 and `nginx.conf` proxies it to the `api` service on the
-compose network. So the bundle carries no hostname, the same image runs locally
-and on the demo host, and there is no CORS configuration anywhere.
+The Docker build passes an empty `API_BASE_URL`, which means same-origin. The
+browser calls `/api/...` on port 3000 and `nginx.conf` proxies it to the `api`
+service on the compose network. So the bundle carries no hostname, the same
+image runs anywhere, and inside compose no CORS is involved.
 
 `nginx.conf` also does the two things a Flutter web app needs from a server:
 
@@ -83,27 +101,61 @@ flutter analyze   # must be clean before a PR
 flutter test
 ```
 
-The widget tests cover both responsive layouts: the phone layout must show a
-`NavigationBar`, the desktop layout a `NavigationRail`, and the landing page must
-have exactly one `FilledButton` — if a second primary call to action appears,
-that test fails on purpose.
+Or both at once, with the output saved to `.check.log`:
+
+```sh
+tool/check.sh
+```
+
+What the tests cover:
+
+- `test/app_test.dart` — the whole R1 flow on screen, against a fake backend
+  (`test/support/fake_backend.dart`): log in and register, the redirect to login
+  and back, Today in its three states, creating a project, the invite link,
+  joining, adding a day, the call sheet, and both responsive layouts.
+- `test/api_client_test.dart` — the HTTP client against scripted responses: the
+  token header, the error envelope, paging, and logging out on a rejected token.
+- `test/models_test.dart` — the fixtures parsed by the real `fromJson`.
+- `test/dates_test.dart`, `test/routes_test.dart` — small pure functions.
 
 ## Layout
 
 ```
 lib/
-  main.dart                    ProviderScope + MaterialApp.router, nothing else
+  main.dart                    loads the saved session, then ProviderScope + MaterialApp.router
   core/
     theme.dart                 the only place colours, type and shape are defined
-    router.dart                go_router: "/" and "/app"
-    api_client.dart            dio, configured but not called yet
+    models.dart                the shapes in docs/api.md, with hand-written fromJson
+    backend.dart               the Backend interface every screen talks to + ApiException
+    api_client.dart            RealApi: Backend over HTTP (dio)
     mock/
-      mock_api.dart            loads the fixtures below
+      mock_api.dart            MockBackend: Backend from the fixtures below
       fixtures/*.json          sample data matching docs/api.md exactly
+    session.dart               who is logged in, and where that is stored
+    providers.dart             the backend, the clock, and the data each screen loads
+    routes.dart                every address in the app
+    router.dart                go_router, with the login redirects
+    dates.dart                 formatting for dates and call times (never converting them)
+    widgets.dart               loading / error / empty states and other shared pieces
   features/
-    landing/landing_page.dart  the public page
-    app_shell/app_shell.dart   the product shell — nav, empty bodies
+    landing/                   the public page
+    auth/                      log in, create account
+    app_shell/                 bottom bar on a phone, rail on a desktop
+    today/                     where do I need to be today
+    projects/                  my projects, one project, the invite link
+    shooting_day/              add a day, the call sheet
+    invite/                    where an invite link lands
 ```
+
+### Three rules worth knowing
+
+- **Screens never call dio.** They ask `backendProvider` for a `Backend`. That is
+  what lets tests and `USE_MOCK` swap the server out.
+- **Dates and call times are strings**, exactly as the API sends them
+  (`"2026-10-04"`, `"07:30"`). They are formatted in `core/dates.dart` and never
+  turned into a `DateTime` — that is how a call time ends up five hours off.
+- **Nothing navigates after login.** Signing in changes the session; the router
+  notices and redirects. Same for logging out.
 
 Features go in `features/<name>/`, one folder each. Anything shared by two
 features moves to `core/`.

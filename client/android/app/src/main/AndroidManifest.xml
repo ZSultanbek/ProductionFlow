@@ -1,6 +1,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The app talks to the API over the network. The Flutter template only
+         adds this to the debug manifest, so without this line a release APK
+         installs fine and then silently cannot reach the server. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
-        android:label="productionflow"
+        android:label="ProductionFlow"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

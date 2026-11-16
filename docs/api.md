@@ -733,8 +733,8 @@ Breaking for anyone building against the previous version (the client mocks):
 - **ShootingDay** gains `updated_at`. **Participant** gains `has_account`.
   **Project** gains `my_role`, `my_participant_id`, `invite_code`, `invite_url`.
 
-Fixtures to update in `client/lib/core/mock/fixtures/`: `change_preview.json`,
-`shooting_days.json`, `participants.json`, `project.json`, `change_feed.json`.
+The fixtures in `client/lib/core/mock/fixtures/` were brought in line with this
+on 16 November 2026, together with the first client screens.
 
 Resolved open questions from the previous version:
 

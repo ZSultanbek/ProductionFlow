@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../core/routes.dart';
 import '../../core/theme.dart';
-import '../app_shell/app_shell.dart';
 
 /// The public face of the product: what it does for a crew, and one way in.
 ///
@@ -12,8 +12,6 @@ import '../app_shell/app_shell.dart';
 /// the call to action, because on a phone the words have to land first.
 class LandingPage extends StatelessWidget {
   const LandingPage({super.key});
-
-  static const String path = '/';
 
   @override
   Widget build(BuildContext context) {
@@ -62,11 +60,14 @@ class _TopBar extends StatelessWidget {
     final theme = Theme.of(context);
     return Row(
       children: [
-        const _Wordmark(),
-        const Spacer(),
+        // Expanded, so on a narrow phone the name gives way before the row
+        // overflows.
+        const Expanded(child: _Wordmark()),
+        // Goes to the app; the router sends anyone not logged in to the login
+        // screen first.
         TextButton(
-          onPressed: () => context.go(AppShell.path),
-          child: Text('Open app', style: theme.textTheme.labelLarge),
+          onPressed: () => context.go(Routes.today),
+          child: Text('Log in', style: theme.textTheme.labelLarge),
         ),
       ],
     );
@@ -92,7 +93,15 @@ class _Wordmark extends StatelessWidget {
           ),
         ),
         const SizedBox(width: AppTheme.space3),
-        Text('ProductionFlow', style: theme.textTheme.headlineSmall),
+        Flexible(
+          child: Text(
+            'ProductionFlow',
+            style: theme.textTheme.headlineSmall,
+            maxLines: 1,
+            softWrap: false,
+            overflow: TextOverflow.fade,
+          ),
+        ),
       ],
     );
   }
@@ -168,7 +177,7 @@ class _Pitch extends StatelessWidget {
           child: SizedBox(
             width: isWide ? null : double.infinity,
             child: FilledButton.icon(
-              onPressed: () => context.go(AppShell.path),
+              onPressed: () => context.go(Routes.today),
               icon: const Icon(Icons.arrow_forward_rounded, size: 20),
               iconAlignment: IconAlignment.end,
               label: const Text('Open ProductionFlow'),
@@ -177,7 +186,7 @@ class _Pitch extends StatelessWidget {
         ),
         const SizedBox(height: AppTheme.space4),
         Text(
-          'Demo build — runs on sample data, no sign-up.',
+          'Free for small crews. Web and Android.',
           style: theme.textTheme.bodySmall,
         ),
       ],
@@ -217,8 +226,14 @@ class ImpactPreviewCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Text('Day 4 · Kok-Tobe', style: theme.textTheme.titleMedium),
-                const Spacer(),
+                Expanded(
+                  child: Text(
+                    'Day 4 · Kok-Tobe',
+                    style: theme.textTheme.titleMedium,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: AppTheme.space3),
                 Text('preview', style: theme.textTheme.bodySmall),
               ],
             ),

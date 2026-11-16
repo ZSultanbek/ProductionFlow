@@ -25,7 +25,7 @@ code over clever code**.
   web framework), `pgx/v5` for Postgres (no ORM), `golang-migrate` for schema.
 - **DB:** PostgreSQL 16.
 - **Client:** Flutter (Dart 3), one codebase → Android APK + web build.
-  Riverpod for state, `dio` for HTTP, `json_serializable` for models.
+  Riverpod for state, `dio` for HTTP, hand-written `fromJson` for models.
 - **Deploy:** Docker Compose locally; free-tier hosting for the demo.
 - **iOS is out of scope.** Do not add iOS-specific code or dependencies.
 

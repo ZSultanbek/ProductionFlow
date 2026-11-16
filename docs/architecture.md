@@ -286,8 +286,10 @@ recoverPanic → requestLogger → cors (prod) → mux → [requireAuth] → han
   match). Allows `Authorization` and `Content-Type`, methods
   `GET, POST, PUT, PATCH, DELETE`, answers preflight `OPTIONS` with 204 and
   `Access-Control-Max-Age: 600`. No cookies are used, so no
-  `Allow-Credentials` and no CSRF surface. Locally the list is empty and the
-  middleware is a no-op, because nginx makes everything same-origin.
+  `Allow-Credentials` and no CSRF surface. Behind the compose nginx everything
+  is same-origin and the browser never asks. When `APP_ENV=dev` the middleware
+  also admits `http://localhost` and `http://127.0.0.1` on any port, because
+  `flutter run -d chrome` serves the app from a new random port every run.
 - `requireAuth` — wraps every route except `/api/health`, `/api/auth/*` and
   `GET /api/invites/{code}` (so the join page can name the project). Reads
   `Authorization: Bearer <jwt>`, verifies it, puts the user id in the request

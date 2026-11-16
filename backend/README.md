@@ -131,6 +131,7 @@ All optional — the defaults target the compose Postgres.
 | `JWT_SECRET` | a public dev-only value | Signs access tokens. **Required outside dev**, at least 32 bytes: `openssl rand -base64 48` |
 | `JWT_TTL_HOURS` | `168` | Access token lifetime (7 days). No refresh flow in the MVP |
 | `PUBLIC_WEB_URL` | `http://localhost:3000` | Where the web app lives; invite links are `{PUBLIC_WEB_URL}/join/{code}` |
+| `CORS_ALLOWED_ORIGINS` | empty | Comma-separated browser origins allowed to call the API, e.g. `https://productionflow.pages.dev`. In dev, `http://localhost` on any port is allowed as well, for `flutter run -d chrome` |
 
 ## Layout
 

@@ -22,12 +22,15 @@ func (f fakePinger) Ping(context.Context) error { return f.err }
 
 func testDeps(pingErr error) Deps {
 	projects := newFakeProjects()
+	days := newFakeDays(projects)
 	return Deps{
 		DB:           fakePinger{err: pingErr},
 		Users:        newFakeUsers(),
 		Projects:     projects,
-		Days:         newFakeDays(projects),
+		Days:         days,
+		Scenes:       newFakeScenes(projects, days),
 		Tokens:       auth.NewTokens([]byte("test-secret-test-secret-test-secret"), time.Hour),
+		Previews:     auth.NewPreviews([]byte("test-secret-test-secret-test-secret"), 10*time.Minute),
 		Build:        BuildInfo{Version: "test", Commit: "abc1234", BuiltAt: "2026-01-01T00:00:00Z"},
 		Logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
 		PublicWebURL: "https://web.test",

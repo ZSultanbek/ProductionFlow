@@ -12,7 +12,7 @@ func clearEnv(t *testing.T) {
 	t.Helper()
 	for _, key := range []string{
 		"API_ADDR", "DATABASE_URL", "APP_ENV", "SHUTDOWN_TIMEOUT_SECONDS",
-		"JWT_SECRET", "JWT_TTL_HOURS", "PUBLIC_WEB_URL", "CORS_ALLOWED_ORIGINS",
+		"JWT_SECRET", "JWT_TTL_HOURS", "PREVIEW_TTL_MINUTES", "PUBLIC_WEB_URL", "CORS_ALLOWED_ORIGINS",
 	} {
 		t.Setenv(key, "")
 	}
@@ -30,6 +30,23 @@ func TestLoadDevDefaults(t *testing.T) {
 	}
 	if cfg.JWTTTL != 7*24*time.Hour {
 		t.Errorf("JWTTTL = %v, want 7 days", cfg.JWTTTL)
+	}
+	if cfg.PreviewTTL != 10*time.Minute {
+		t.Errorf("PreviewTTL = %v, want 10 minutes (docs/api.md promises it)", cfg.PreviewTTL)
+	}
+}
+
+func TestLoadPreviewTTL(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("PREVIEW_TTL_MINUTES", "3")
+	cfg, err := Load()
+	if err != nil || cfg.PreviewTTL != 3*time.Minute {
+		t.Errorf("PreviewTTL = %v, err = %v; want 3m", cfg.PreviewTTL, err)
+	}
+
+	t.Setenv("PREVIEW_TTL_MINUTES", "0")
+	if _, err := Load(); err == nil {
+		t.Error("accepted PREVIEW_TTL_MINUTES=0")
 	}
 }
 

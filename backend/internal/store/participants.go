@@ -108,3 +108,43 @@ func (db *DB) JoinProject(ctx context.Context, user domain.User, projectID strin
 	}
 	return result, created, nil
 }
+
+// ParticipantsForProject lists everyone in a project the way a call sheet does:
+// producers, then crew, then cast, each by name. A crew is 5–15 people, so the
+// list is never paged.
+func (db *DB) ParticipantsForProject(ctx context.Context, projectID string) ([]domain.Participant, error) {
+	rows, err := db.Pool.Query(ctx, `
+		SELECT `+participantColumns+`
+		FROM participant pa
+		WHERE pa.project_id = $1
+		ORDER BY `+peopleOrder,
+		projectID)
+	if err != nil {
+		return nil, fmt.Errorf("participants for project: %w", err)
+	}
+	people, err := pgx.CollectRows(rows, func(row pgx.CollectableRow) (domain.Participant, error) {
+		return scanParticipant(row)
+	})
+	if err != nil {
+		return nil, fmt.Errorf("participants for project: %w", err)
+	}
+	return people, nil
+}
+
+// CreateParticipant adds a person by name, with no account (US-06). If they
+// register later with the same email and follow the invite, JoinProject links
+// them to this row instead of creating a second one.
+func (db *DB) CreateParticipant(ctx context.Context, projectID string, in domain.ParticipantInput) (domain.Participant, error) {
+	p, err := scanParticipant(db.Pool.QueryRow(ctx, `
+		INSERT INTO participant (project_id, display_name, email, role)
+		VALUES ($1, $2, nullif($3, ''), $4)
+		RETURNING `+participantColumns,
+		projectID, in.DisplayName, in.Email, string(in.Role)))
+	if isUniqueViolation(err, "participant_project_email_idx") {
+		return domain.Participant{}, ErrParticipantEmailTaken
+	}
+	if err != nil {
+		return domain.Participant{}, fmt.Errorf("create participant: %w", err)
+	}
+	return p, nil
+}

@@ -24,7 +24,8 @@ func newDay(t *testing.T, db *DB, projectID, date, callTime, location string) do
 	return d
 }
 
-// The scene endpoints are US-06; until then tests put scenes in with SQL.
+// newScene inserts with plain SQL, so the call-sheet tests do not depend on
+// CreateScene and SetSceneParticipants (those are tested in scenes_test.go).
 func newScene(t *testing.T, db *DB, projectID, dayID, number string, participantIDs ...string) string {
 	t.Helper()
 	ctx := context.Background()

@@ -33,6 +33,9 @@ type Config struct {
 	// JWTTTL is how long an access token stays valid. No refresh flow in the
 	// MVP, so this is also how long until the user has to log in again.
 	JWTTTL time.Duration
+	// PreviewTTL is how long a change preview can be confirmed for. Past it,
+	// apply answers preview_expired and the producer looks again.
+	PreviewTTL time.Duration
 	// PublicWebURL is where the Flutter web app is served, without a trailing
 	// slash. Invite links are built from it: {PublicWebURL}/join/{code}.
 	PublicWebURL string
@@ -55,6 +58,7 @@ func Load() (Config, error) {
 		ShutdownTimeout: 10 * time.Second,
 		Env:             envString("APP_ENV", "dev"),
 		JWTTTL:          7 * 24 * time.Hour,
+		PreviewTTL:      10 * time.Minute,
 		PublicWebURL:    strings.TrimRight(envString("PUBLIC_WEB_URL", "http://localhost:3000"), "/"),
 	}
 
@@ -81,6 +85,14 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("JWT_TTL_HOURS: want a positive integer, got %q", raw)
 		}
 		cfg.JWTTTL = time.Duration(hours) * time.Hour
+	}
+
+	if raw := os.Getenv("PREVIEW_TTL_MINUTES"); raw != "" {
+		minutes, err := strconv.Atoi(raw)
+		if err != nil || minutes <= 0 {
+			return Config{}, fmt.Errorf("PREVIEW_TTL_MINUTES: want a positive integer, got %q", raw)
+		}
+		cfg.PreviewTTL = time.Duration(minutes) * time.Minute
 	}
 
 	switch secret := os.Getenv("JWT_SECRET"); {

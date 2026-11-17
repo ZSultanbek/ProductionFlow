@@ -27,7 +27,10 @@ type Deps struct {
 	Users    UserStore
 	Projects ProjectStore
 	Days     DayStore
+	Scenes   SceneStore
 	Tokens   *auth.Tokens
+	// Previews signs the token a change preview hands out, which apply checks.
+	Previews *auth.Previews
 	Build    BuildInfo
 	Logger   *slog.Logger
 	// PublicWebURL is the web app's base URL, used to build invite links.
@@ -42,14 +45,6 @@ type Deps struct {
 // envelope. Move a line out of here when its handler lands, and update the
 // Status table in docs/api.md in the same PR.
 var notYetImplemented = []string{
-	"GET /api/projects/{project_id}/participants",
-	"POST /api/projects/{project_id}/participants",
-	"PUT /api/days/{day_id}/participants",
-	"GET /api/projects/{project_id}/scenes",
-	"POST /api/projects/{project_id}/scenes",
-	"PATCH /api/scenes/{scene_id}",
-	"PUT /api/scenes/{scene_id}/participants",
-	"POST /api/changes/preview",
 	"POST /api/changes/apply",
 	"GET /api/projects/{project_id}/changes",
 	"GET /api/me/schedule",
@@ -81,6 +76,17 @@ func NewRouter(deps Deps) http.Handler {
 	mux.HandleFunc("POST /api/projects/{project_id}/days", requireAuth(deps, handleCreateDay(deps)))
 	mux.HandleFunc("GET /api/days/{day_id}", requireAuth(deps, handleGetDay(deps)))
 	mux.HandleFunc("GET /api/me/today", requireAuth(deps, handleToday(deps)))
+
+	mux.HandleFunc("GET /api/projects/{project_id}/participants", requireAuth(deps, handleListParticipants(deps)))
+	mux.HandleFunc("POST /api/projects/{project_id}/participants", requireAuth(deps, handleCreateParticipant(deps)))
+	mux.HandleFunc("PUT /api/days/{day_id}/participants", requireAuth(deps, handleSetDayParticipants(deps)))
+
+	mux.HandleFunc("GET /api/projects/{project_id}/scenes", requireAuth(deps, handleListScenes(deps)))
+	mux.HandleFunc("POST /api/projects/{project_id}/scenes", requireAuth(deps, handleCreateScene(deps)))
+	mux.HandleFunc("PATCH /api/scenes/{scene_id}", requireAuth(deps, handleUpdateScene(deps)))
+	mux.HandleFunc("PUT /api/scenes/{scene_id}/participants", requireAuth(deps, handleSetSceneParticipants(deps)))
+
+	mux.HandleFunc("POST /api/changes/preview", requireAuth(deps, handlePreviewChange(deps)))
 
 	for _, pattern := range notYetImplemented {
 		mux.HandleFunc(pattern, notImplemented)

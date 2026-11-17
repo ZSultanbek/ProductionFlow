@@ -14,7 +14,22 @@ class FakeBackend implements Backend {
 
   final List<Project> projectList = [];
   final List<ShootingDay> dayList = [];
+
+  /// Call sheets a test fills in by hand. A day without one here gets a sheet
+  /// built from [dayList], [sceneList], [onSetAllDay] and [people].
   final Map<String, CallSheet> sheets = {};
+
+  /// Everyone in every project, for the people and impact screens.
+  final List<Participant> people = [];
+  final List<Scene> sceneList = [];
+
+  /// Day id to the ids of the people on set all day.
+  final Map<String, List<String>> onSetAllDay = {};
+
+  /// What `previewMoveDay` answers, and the requests it was asked.
+  ChangePreview? previewAnswer;
+  ApiException? previewError;
+  final List<Map<String, String?>> previewRequests = [];
 
   /// What `today()` answers. Set it per test.
   Today todayAnswer = const Today(date: null, isToday: false, days: []);
@@ -47,6 +62,31 @@ class FakeBackend implements Backend {
     );
     projectList.add(project);
     return project;
+  }
+
+  Participant addPerson(String projectId, String name, String role, {bool hasAccount = true}) {
+    final person = Participant(
+      id: _id('person'),
+      projectId: projectId,
+      displayName: name,
+      role: role,
+      hasAccount: hasAccount,
+    );
+    people.add(person);
+    return person;
+  }
+
+  Scene addScene(String projectId, String number, {String? dayId, List<String> peopleIds = const []}) {
+    final scene = Scene(
+      id: _id('scene'),
+      projectId: projectId,
+      shootingDayId: dayId,
+      number: number,
+      description: 'Scene $number',
+      participants: _refs(peopleIds),
+    );
+    sceneList.add(scene);
+    return scene;
   }
 
   ShootingDay addDay(String projectId, String date, String callTime, String location) {
@@ -145,15 +185,170 @@ class FakeBackend implements Backend {
   @override
   Future<CallSheet> callSheet(String dayId) async {
     final sheet = sheets[dayId];
-    if (sheet == null) {
-      throw const ApiException(code: 'day_not_found', message: 'no such shooting day');
+    if (sheet != null) {
+      return sheet;
     }
-    return sheet;
+    final day = _day(dayId);
+    final parent = await project(day.projectId);
+    return CallSheet(
+      id: day.id,
+      projectId: parent.id,
+      projectName: parent.name,
+      myRole: parent.myRole,
+      shootDate: day.shootDate,
+      callTime: day.callTime,
+      location: day.location,
+      onSetAllDay: _refs(onSetAllDay[day.id] ?? const []),
+      scenes: [
+        for (final scene in sceneList)
+          if (scene.shootingDayId == day.id)
+            CallSheetScene(
+              id: scene.id,
+              number: scene.number,
+              description: scene.description,
+              participants: scene.participants,
+            ),
+      ],
+    );
   }
 
   @override
   Future<Today> today(String date) async {
     askedForDate = date;
     return todayAnswer;
+  }
+
+  // --- people and scenes ---
+
+  @override
+  Future<List<Participant>> participants(String projectId) async {
+    await project(projectId);
+    return people.where((p) => p.projectId == projectId).toList();
+  }
+
+  @override
+  Future<Participant> addParticipant(
+    String projectId, {
+    required String displayName,
+    required String role,
+    String? email,
+  }) async {
+    final person = Participant(
+      id: _id('person'),
+      projectId: projectId,
+      displayName: displayName,
+      role: role,
+      hasAccount: false,
+      email: email,
+    );
+    people.add(person);
+    return person;
+  }
+
+  @override
+  Future<List<ParticipantRef>> setDayParticipants(String dayId, List<String> participantIds) async {
+    _day(dayId);
+    onSetAllDay[dayId] = [...participantIds];
+    return _refs(participantIds);
+  }
+
+  @override
+  Future<List<Scene>> scenes(String projectId) async {
+    return sceneList.where((s) => s.projectId == projectId).toList();
+  }
+
+  @override
+  Future<Scene> createScene(
+    String projectId, {
+    required String number,
+    required String description,
+    String? shootingDayId,
+  }) async {
+    if (sceneList.any((s) => s.projectId == projectId && s.number == number)) {
+      throw const ApiException(code: 'scene_number_taken', message: 'scene number taken');
+    }
+    final scene = Scene(
+      id: _id('scene'),
+      projectId: projectId,
+      shootingDayId: shootingDayId,
+      number: number,
+      description: description,
+      participants: const [],
+    );
+    sceneList.add(scene);
+    return scene;
+  }
+
+  @override
+  Future<Scene> moveScene(String sceneId, String? shootingDayId) async {
+    return _replaceScene(sceneId, (old) => Scene(
+      id: old.id,
+      projectId: old.projectId,
+      shootingDayId: shootingDayId,
+      number: old.number,
+      description: old.description,
+      participants: old.participants,
+    ));
+  }
+
+  @override
+  Future<Scene> setSceneParticipants(String sceneId, List<String> participantIds) async {
+    return _replaceScene(sceneId, (old) => Scene(
+      id: old.id,
+      projectId: old.projectId,
+      shootingDayId: old.shootingDayId,
+      number: old.number,
+      description: old.description,
+      participants: _refs(participantIds),
+    ));
+  }
+
+  @override
+  Future<ChangePreview> previewMoveDay(
+    String dayId, {
+    String? shootDate,
+    String? callTime,
+    String? location,
+  }) async {
+    previewRequests.add({
+      'day': dayId,
+      'shoot_date': shootDate,
+      'call_time': callTime,
+      'location': location,
+    });
+    final error = previewError;
+    if (error != null) {
+      throw error;
+    }
+    final answer = previewAnswer;
+    if (answer == null) {
+      throw StateError('set previewAnswer in the test first');
+    }
+    return answer;
+  }
+
+  // --- helpers ---
+
+  ShootingDay _day(String dayId) {
+    for (final day in dayList) {
+      if (day.id == dayId) {
+        return day;
+      }
+    }
+    throw const ApiException(code: 'day_not_found', message: 'no such shooting day');
+  }
+
+  List<ParticipantRef> _refs(List<String> ids) => [
+    for (final person in people)
+      if (ids.contains(person.id))
+        ParticipantRef(id: person.id, displayName: person.displayName, role: person.role),
+  ];
+
+  Scene _replaceScene(String sceneId, Scene Function(Scene old) change) {
+    final index = sceneList.indexWhere((s) => s.id == sceneId);
+    if (index < 0) {
+      throw const ApiException(code: 'scene_not_found', message: 'no such scene');
+    }
+    return sceneList[index] = change(sceneList[index]);
   }
 }

@@ -134,6 +134,97 @@ class RealApi implements Backend {
     return Today.fromJson(await _send('GET', '/api/me/today', query: {'date': date}));
   }
 
+  // --- people and scenes ---
+
+  @override
+  Future<List<Participant>> participants(String projectId) {
+    return _all('/api/projects/$projectId/participants', Participant.fromJson);
+  }
+
+  @override
+  Future<Participant> addParticipant(
+    String projectId, {
+    required String displayName,
+    required String role,
+    String? email,
+  }) async {
+    final body = await _send('POST', '/api/projects/$projectId/participants', data: {
+      'display_name': displayName,
+      'role': role,
+      'email': email,
+    });
+    return Participant.fromJson(body);
+  }
+
+  @override
+  Future<List<ParticipantRef>> setDayParticipants(String dayId, List<String> participantIds) async {
+    final body = await _send('PUT', '/api/days/$dayId/participants', data: {
+      'participant_ids': participantIds,
+    });
+    return [
+      for (final item in body['on_set_all_day'] as List<dynamic>)
+        ParticipantRef.fromJson(item as Map<String, dynamic>),
+    ];
+  }
+
+  @override
+  Future<List<Scene>> scenes(String projectId) {
+    return _all('/api/projects/$projectId/scenes', Scene.fromJson);
+  }
+
+  @override
+  Future<Scene> createScene(
+    String projectId, {
+    required String number,
+    required String description,
+    String? shootingDayId,
+  }) async {
+    final body = await _send('POST', '/api/projects/$projectId/scenes', data: {
+      'number': number,
+      'description': description,
+      'shooting_day_id': shootingDayId,
+    });
+    return Scene.fromJson(body);
+  }
+
+  @override
+  Future<Scene> moveScene(String sceneId, String? shootingDayId) async {
+    // null is sent as JSON null, which the API reads as "take it off its day".
+    final body = await _send('PATCH', '/api/scenes/$sceneId', data: {
+      'shooting_day_id': shootingDayId,
+    });
+    return Scene.fromJson(body);
+  }
+
+  @override
+  Future<Scene> setSceneParticipants(String sceneId, List<String> participantIds) async {
+    final body = await _send('PUT', '/api/scenes/$sceneId/participants', data: {
+      'participant_ids': participantIds,
+    });
+    return Scene.fromJson(body);
+  }
+
+  // --- the impact view ---
+
+  @override
+  Future<ChangePreview> previewMoveDay(
+    String dayId, {
+    String? shootDate,
+    String? callTime,
+    String? location,
+  }) async {
+    final body = await _send('POST', '/api/changes/preview', data: {
+      'kind': 'move_shooting_day',
+      'shooting_day_id': dayId,
+      'to': {
+        'shoot_date': ?shootDate,
+        'call_time': ?callTime,
+        'location': ?location,
+      },
+    });
+    return ChangePreview.fromJson(body);
+  }
+
   // --- plumbing ---
 
   /// One request. Returns the decoded JSON object, or throws [ApiException].

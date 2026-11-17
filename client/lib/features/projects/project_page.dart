@@ -10,11 +10,15 @@ import '../../core/providers.dart';
 import '../../core/routes.dart';
 import '../../core/theme.dart';
 import '../../core/widgets.dart';
+import '../people/add_person_dialog.dart';
+import '../scenes/add_scene_dialog.dart';
+import '../scenes/scene_dialogs.dart';
 import '../shooting_day/add_day_dialog.dart';
 
-/// One production: its shooting days, in order (US-04). A producer also gets
-/// the invite link (US-02) and the button to add a day; crew and cast see the
-/// same schedule without either.
+/// One production: its shooting days, in order (US-04), the scenes not on a
+/// day yet, and the people (US-06). A producer also gets the invite link
+/// (US-02) and the buttons to add days, scenes and people; crew and cast see
+/// the same project without them.
 class ProjectPage extends ConsumerWidget {
   const ProjectPage({super.key, required this.projectId});
 
@@ -131,6 +135,11 @@ class _ProjectBody extends ConsumerWidget {
           },
         ),
 
+        const SizedBox(height: AppTheme.space7),
+        _UnscheduledScenes(project: project),
+        const SizedBox(height: AppTheme.space7),
+        _People(project: project),
+
         // Room for the floating button.
         const SizedBox(height: AppTheme.space8),
       ],
@@ -240,6 +249,165 @@ class _DayCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Scenes that exist but are not on any day yet. They never count towards a
+/// day's impact until they are put on one.
+class _UnscheduledScenes extends ConsumerWidget {
+  const _UnscheduledScenes({required this.project});
+
+  final Project project;
+
+  void _refresh(WidgetRef ref) {
+    ref.invalidate(scenesProvider(project.id));
+    ref.invalidate(daysProvider(project.id));
+    ref.invalidate(todayProvider);
+  }
+
+  Future<void> _add(BuildContext context, WidgetRef ref) async {
+    final scene = await showDialog<Scene>(
+      context: context,
+      builder: (context) => AddSceneDialog(projectId: project.id),
+    );
+    if (scene != null) {
+      _refresh(ref);
+    }
+  }
+
+  Future<void> _schedule(BuildContext context, WidgetRef ref, Scene scene) async {
+    final days = ref.read(daysProvider(project.id)).value ?? const <ShootingDay>[];
+    final dayId = await pickDay(context, days);
+    if (dayId == null || !context.mounted) {
+      return;
+    }
+    try {
+      await ref.read(backendProvider).moveScene(scene.id, dayId);
+      _refresh(ref);
+    } on Object catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(describeError(error))));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final muted = theme.textTheme.bodyMedium?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final scenes = ref.watch(scenesProvider(project.id));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Not on a day yet', style: theme.textTheme.headlineSmall),
+        const SizedBox(height: AppTheme.space3),
+        scenes.when(
+          loading: () => const LinearProgressIndicator(),
+          error: (error, _) => FormError(describeError(error)),
+          data: (all) {
+            final loose = [
+              for (final scene in all)
+                if (scene.shootingDayId == null) scene,
+            ];
+            if (loose.isEmpty) {
+              return Text(
+                all.isEmpty ? 'No scenes yet.' : 'Every scene is on a shooting day.',
+                style: muted,
+              );
+            }
+            return Column(
+              children: [
+                for (final scene in loose)
+                  Card(
+                    child: ListTile(
+                      leading: Text(scene.number, style: theme.textTheme.titleLarge),
+                      title: Text(scene.description.isEmpty ? 'Scene ${scene.number}' : scene.description),
+                      subtitle: Text(switch (scene.participants.length) {
+                        0 => 'Nobody attached yet',
+                        1 => '1 person',
+                        final n => '$n people',
+                      }),
+                      trailing: project.iAmProducer
+                          ? TextButton(
+                              onPressed: () => _schedule(context, ref, scene),
+                              child: const Text('Put on a day'),
+                            )
+                          : null,
+                    ),
+                  ),
+              ],
+            );
+          },
+        ),
+        if (project.iAmProducer) ...[
+          const SizedBox(height: AppTheme.space2),
+          TextButton.icon(
+            onPressed: () => _add(context, ref),
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: const Text('Add scene'),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Everyone in the project, including people added by name who have no app.
+class _People extends ConsumerWidget {
+  const _People({required this.project});
+
+  final Project project;
+
+  Future<void> _add(BuildContext context, WidgetRef ref) async {
+    final person = await showDialog<Participant>(
+      context: context,
+      builder: (context) => AddPersonDialog(projectId: project.id),
+    );
+    if (person != null) {
+      ref.invalidate(participantsProvider(project.id));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final people = ref.watch(participantsProvider(project.id));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('People', style: theme.textTheme.headlineSmall),
+        const SizedBox(height: AppTheme.space3),
+        people.when(
+          loading: () => const LinearProgressIndicator(),
+          error: (error, _) => FormError(describeError(error)),
+          data: (list) => Wrap(
+            spacing: AppTheme.space2,
+            runSpacing: AppTheme.space2,
+            children: [
+              for (final person in list)
+                Chip(
+                  label: Text(
+                    person.hasAccount
+                        ? '${person.displayName} · ${person.role}'
+                        : '${person.displayName} · ${person.role} · no app',
+                  ),
+                  visualDensity: VisualDensity.compact,
+                ),
+            ],
+          ),
+        ),
+        if (project.iAmProducer) ...[
+          const SizedBox(height: AppTheme.space2),
+          TextButton.icon(
+            onPressed: () => _add(context, ref),
+            icon: const Icon(Icons.person_add_alt_outlined, size: 18),
+            label: const Text('Add a person'),
+          ),
+        ],
+      ],
     );
   }
 }

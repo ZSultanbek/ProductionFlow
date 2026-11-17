@@ -42,15 +42,17 @@ Release 1 is built on both sides: the API and the app for web and Android.
 | | Join from a link as crew or cast | ✅ | ✅ |
 | | Add a shooting day: date, call time, location | ✅ | ✅ |
 | | Today's call sheet on a phone | ✅ | ✅ |
-| **R2 — Impact** | Scenes on a day, with the people needed in each | next | next |
-| | See who a change affects before confirming it | next | next |
+| **R2 — Impact** | Scenes on a day, with the people needed in each | ✅ | ✅ |
+| | See who a change affects before confirming it | ✅ | ✅ |
 | | Confirm the change; it is recorded in the change feed | next | next |
 | **R3 — Stretch** | Notify only the people affected | planned | planned |
 | | "My schedule": only my own days | planned | planned |
 
-The call sheet screen can already draw scenes and the people in them, but a
-call sheet shows only the day's time and place until R2 adds a way to put
-scenes on it.
+A producer builds each day on its call sheet: adds scenes, picks who is needed
+in each and who is on set all day — including people added by name who never
+install the app. "Move this day" then shows exactly who and what the move
+affects. Confirming it is the next step (US-08); until then the preview is
+look-only and changes nothing.
 
 Not deployed yet. The plan is free tiers all the way — Neon for Postgres, Render
 for the API, Cloudflare Pages for the web app — and it is written up in

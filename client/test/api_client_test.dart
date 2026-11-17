@@ -216,4 +216,60 @@ void main() {
     expect(adapter.requests.single.path, '/api/me/today');
     expect(adapter.requests.single.queryParameters['date'], '2026-11-02');
   });
+
+  test('a move preview sends only the fields that change', () async {
+    final adapter = ScriptedAdapter(
+      (request) => (
+        200,
+        {
+          'preview_token': 'tok',
+          'expires_at': '2026-11-02T09:10:00Z',
+          'change': {
+            'kind': 'move_shooting_day',
+            'shooting_day_id': 'd1',
+            'diff': {
+              'location': {'from': 'Kok-Tobe', 'to': 'Studio B'},
+            },
+          },
+          'affected': {'scenes': [], 'participants': []},
+          'will_notify_count': 0,
+        },
+      ),
+    );
+
+    final preview = await apiWith(adapter).previewMoveDay('d1', location: 'Studio B');
+
+    final request = adapter.requests.single;
+    expect(request.method, 'POST');
+    expect(request.path, '/api/changes/preview');
+    expect(request.data, {
+      'kind': 'move_shooting_day',
+      'shooting_day_id': 'd1',
+      'to': {'location': 'Studio B'},
+    });
+    expect(preview.diff['location']?.to, 'Studio B');
+  });
+
+  test('taking a scene off its day sends an explicit null', () async {
+    final adapter = ScriptedAdapter(
+      (request) => (
+        200,
+        {
+          'id': 's1',
+          'project_id': 'p1',
+          'shooting_day_id': null,
+          'number': '14',
+          'description': 'Kitchen',
+          'participants': [],
+        },
+      ),
+    );
+
+    final scene = await apiWith(adapter).moveScene('s1', null);
+
+    final request = adapter.requests.single;
+    expect(request.method, 'PATCH');
+    expect(request.data, {'shooting_day_id': null});
+    expect(scene.shootingDayId, isNull);
+  });
 }

@@ -1,37 +1,62 @@
-# ProductionFlow
+<h1 align="center">ProductionFlow</h1>
 
-Shoot coordination for small film crews (5–15 people).
+<p align="center">
+  <b>Shoot coordination for small film crews.</b><br>
+  One call sheet everyone trusts — and, before a schedule change is confirmed,<br>
+  exactly who and what it affects.
+</p>
 
-Everything attaches to a **shooting day**. When someone changes a day or a scene,
-ProductionFlow shows *who and what this affects* before the change is confirmed,
-then notifies only those people. That mechanic is the product; see
-[CLAUDE.md](CLAUDE.md) for the scope boundary around it.
+<p align="center">
+  <img alt="Go 1.25" src="https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white">
+  <img alt="Flutter" src="https://img.shields.io/badge/Flutter-Android%20%2B%20Web-02569B?logo=flutter&logoColor=white">
+  <img alt="PostgreSQL 16" src="https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white">
+  <img alt="Status: release 1 of 3" src="https://img.shields.io/badge/status-release%201%20of%203-7A4A24">
+</p>
 
-KBTU · IT Project Management · Fall 2026.
-Zhanibek (backend/DevOps), Almas (Flutter client), Zhaksylyk (PM).
+## The problem
 
-## Repository
+A crew of 5–15 people runs a shoot through Telegram, Google Sheets and Drive.
+Call times change in a chat and someone misses it. People shoot from an old
+version of the script. And when a shooting day moves, nobody can say which
+scenes and which people that affects — so the producer calls everyone by hand,
+and still forgets someone.
 
-| Path | What |
-| --- | --- |
-| [`backend/`](backend/README.md) | Go API, Postgres 16, migrations |
-| [`client/`](client/README.md) | Flutter app — Android + web |
-| [`docker-compose.yml`](docker-compose.yml) | The whole stack. The only compose file in the repo. |
-| [`docs/api.md`](docs/api.md) | The API contract. **Changes before the code.** |
-| [`CLAUDE.md`](CLAUDE.md) | Domain model, conventions, scope, working style |
+## The idea
 
-## Status
+**Everything hangs off a shooting day.** Scenes belong to a day, people belong
+to scenes, so the app always knows who is needed where. Change a day, and
+ProductionFlow shows who and what it affects *before* you confirm — then tells
+only those people.
 
-Skeleton. Both halves run; no features are implemented.
+That one mechanic is the product. Everything else either feeds it or is out of
+scope ([the boundary is written down](CLAUDE.md#scope--do-not-build-these)).
 
-- `GET /api/health` works (build info + database ping). Every other endpoint
-  returns `501` in the standard error envelope.
-- The client has a landing page and an app shell with navigation. It runs with no
-  backend, reading nothing — fixtures for that live in `client/lib/core/mock/`.
-- Migration `0001_init` creates the six core tables: `project`, `shooting_day`,
-  `scene`, `participant`, `scene_participant`, `change_event`.
+## What works today
 
-## Run the whole thing
+Release 1 is built on both sides: the API and the app for web and Android.
+
+| | Story | API | App |
+| --- | --- | :-: | :-: |
+| **R1 — Core** | Register and log in | ✅ | ✅ |
+| | Create a project, invite the crew by link | ✅ | ✅ |
+| | Join from a link as crew or cast | ✅ | ✅ |
+| | Add a shooting day: date, call time, location | ✅ | ✅ |
+| | Today's call sheet on a phone | ✅ | ✅ |
+| **R2 — Impact** | Scenes on a day, with the people needed in each | next | next |
+| | See who a change affects before confirming it | next | next |
+| | Confirm the change; it is recorded in the change feed | next | next |
+| **R3 — Stretch** | Notify only the people affected | planned | planned |
+| | "My schedule": only my own days | planned | planned |
+
+The call sheet screen can already draw scenes and the people in them, but a
+call sheet shows only the day's time and place until R2 adds a way to put
+scenes on it.
+
+Not deployed yet. The plan is free tiers all the way — Neon for Postgres, Render
+for the API, Cloudflare Pages for the web app — and it is written up in
+[docs/architecture.md](docs/architecture.md#6-hosting-and-deployment).
+
+## Run it
 
 One command, from the repo root:
 
@@ -39,69 +64,96 @@ One command, from the repo root:
 docker compose up --build
 ```
 
-Then open **http://localhost:3000**.
+Then open **http://localhost:3000**. That starts Postgres, applies the
+migrations, starts the API, and serves the web app — in that order. (Partway
+through it prints `productionflow-migrate-1 exited with code 0`. That is the
+migrations finishing, not a failure.)
 
-That starts four things in order: Postgres, a one-shot migration job, the Go API,
-and nginx serving the Flutter web build. The API waits for the migrations to exit
-successfully, so there is no second step and no race on an unmigrated database.
+| Service | Where |
+| --- | --- |
+| Web app | http://localhost:3000 |
+| API | http://localhost:8080 — try `curl localhost:8080/api/health` |
+| Postgres | `localhost:5432`, user and password `productionflow` |
 
-| Service | Where | Notes |
-| --- | --- | --- |
-| `web` | http://localhost:3000 | nginx + the Flutter web bundle |
-| `api` | http://localhost:8080 | exposed for `curl`; the browser does not use this port |
-| `postgres` | `localhost:5432` | `productionflow` / `productionflow` |
-| `migrate` | — | runs `migrations/*.up.sql`, then exits 0 |
+Ports already taken? `POSTGRES_PORT=5433 WEB_PORT=3001 docker compose up --build`
 
-The browser talks to `/api/...` on port 3000 and nginx proxies it to the API, so
-the two are same-origin and there is no CORS configuration anywhere.
+### Working on it
 
-`docker compose up` will print `productionflow-migrate-1 exited with code 0`
-partway through. That is the migration job finishing, not a failure.
+Docker is for running the whole thing. For the edit loop, run each half directly:
 
 ```sh
-curl -s localhost:3000/api/health | jq   # through nginx
-curl -s localhost:8080/api/health | jq   # straight at the API
-docker compose down                      # stop; add -v to drop the database
+cd backend && make dev            # API on :8080, Postgres in Docker
+cd client && flutter run -d chrome   # the app, with hot reload
 ```
 
-Port already taken? `POSTGRES_PORT` and `WEB_PORT` override the host side:
+No server at hand? The app runs on sample data alone:
 
 ```sh
-POSTGRES_PORT=5433 WEB_PORT=3001 docker compose up --build
+cd client && flutter run -d chrome --dart-define=USE_MOCK=true
 ```
 
-Compose cannot run `git` to fill in build info, so `/api/health` reports
-`version: dev` unless you pass it — worth doing for anything you hand to someone:
+More in [backend/README.md](backend/README.md) and
+[client/README.md](client/README.md).
+
+## How it fits together
+
+```mermaid
+flowchart LR
+    web["Flutter web"] -- "JSON + Bearer token" --> api["Go API"]
+    android["Flutter Android"] -- "JSON + Bearer token" --> api
+    api -- "pgx" --> db[("PostgreSQL 16")]
+```
+
+| | |
+| --- | --- |
+| **App** | Flutter, one codebase for Android and web. Riverpod, go_router, dio |
+| **API** | Go standard library `net/http` — no framework, no ORM. pgx for Postgres |
+| **Database** | PostgreSQL 16, plain SQL migrations |
+| **Auth** | bcrypt passwords, 7-day JWT |
+
+Three decisions shape most of the code:
+
+- **A change is two steps, never one.** Preview shows who is affected and writes
+  nothing; apply re-checks that the preview is still true, then commits. A
+  shooting day's date, time and place can only change this way.
+- **A call time is not a timestamp.** It is "07:30 on the 4th", stored as a date
+  and a time and never converted between time zones — on the server or in the
+  app.
+- **The contract comes first.** [docs/api.md](docs/api.md) changes before the
+  code, and the app can run against fixtures made from it.
+
+The reasoning behind these, the data model and the hosting plan are in
+[docs/architecture.md](docs/architecture.md).
+
+## Repository
+
+| Path | What |
+| --- | --- |
+| [`backend/`](backend/README.md) | Go API and SQL migrations |
+| [`client/`](client/README.md) | Flutter app — Android and web |
+| [`docs/api.md`](docs/api.md) | The API contract: every endpoint, with its status |
+| [`docs/architecture.md`](docs/architecture.md) | Layers, schema, auth, the impact flow, hosting, decisions |
+| [`CLAUDE.md`](CLAUDE.md) | Domain model, conventions and the scope boundary |
+| [`docker-compose.yml`](docker-compose.yml) | The whole stack in one file |
+
+## Tests
 
 ```sh
-VERSION=$(git describe --tags --always --dirty) \
-COMMIT=$(git rev-parse --short HEAD) \
-BUILT_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-docker compose up --build
+cd backend && go test ./...       # rules, handlers, auth
+cd client && flutter analyze && flutter test
 ```
 
-## Develop on one half
+The backend also has tests that run against a real Postgres; they are skipped
+unless `TEST_DATABASE_URL` is set — see
+[`backend/internal/store/store_test.go`](backend/internal/store/store_test.go).
 
-Docker is for running the stack, not for the edit loop — rebuilding a Flutter
-image per keystroke is no way to work.
+## Team
 
-```sh
-# API on :8080 with Postgres in Docker, rebuilt by Go directly
-cd backend && make dev
+Built for **IT Project Management** at Kazakh-British Technical University,
+Fall 2026.
 
-# Client with hot reload, in another terminal
-cd client && flutter run -d chrome
-```
-
-Details in each half's README.
-
-## Open decisions
-
-Two things are deliberately unresolved and written down in
-[`docs/api.md`](docs/api.md#open-questions) rather than guessed at:
-
-1. **Day-level participant assignment.** The impact rule unions "people on the
-   day's scenes" with "people assigned directly to the day", but there is no
-   table for the second half — that needs a new table, which is a decision to
-   make out loud.
-2. **`preview_token`**: signed and stateless, or a stored row with an expiry.
+| | |
+| --- | --- |
+| **Zhanibek** | Backend and DevOps |
+| **Almas** | Flutter client |
+| **Zhaksylyk** | Project manager |

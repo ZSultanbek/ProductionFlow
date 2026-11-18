@@ -240,6 +240,119 @@ class CallSheet {
   final List<CallSheetScene> scenes;
 }
 
+/// A scene of the script (US-06). [shootingDayId] is null while the scene is
+/// not on any day yet.
+class Scene {
+  const Scene({
+    required this.id,
+    required this.projectId,
+    required this.shootingDayId,
+    required this.number,
+    required this.description,
+    required this.participants,
+  });
+
+  factory Scene.fromJson(Map<String, dynamic> json) => Scene(
+    id: json['id'] as String,
+    projectId: json['project_id'] as String,
+    shootingDayId: json['shooting_day_id'] as String?,
+    number: json['number'] as String,
+    description: json['description'] as String,
+    participants: _list(json['participants'], ParticipantRef.fromJson),
+  );
+
+  final String id;
+  final String projectId;
+  final String? shootingDayId;
+  final String number;
+  final String description;
+  final List<ParticipantRef> participants;
+}
+
+/// One field of a change: what it was and what it would become.
+class FieldChange {
+  const FieldChange({required this.from, required this.to});
+
+  factory FieldChange.fromJson(Map<String, dynamic> json) =>
+      FieldChange(from: json['from'] as String?, to: json['to'] as String?);
+
+  final String? from;
+  final String? to;
+}
+
+/// Someone a change reaches, and every reason why (US-07).
+class AffectedParticipant {
+  const AffectedParticipant({
+    required this.id,
+    required this.displayName,
+    required this.role,
+    required this.hasAccount,
+    required this.onSetAllDay,
+    required this.sceneNumbers,
+  });
+
+  factory AffectedParticipant.fromJson(Map<String, dynamic> json) {
+    final via = json['via'] as Map<String, dynamic>;
+    return AffectedParticipant(
+      id: json['id'] as String,
+      displayName: json['display_name'] as String,
+      role: json['role'] as String,
+      hasAccount: json['has_account'] as bool,
+      onSetAllDay: via['day'] as bool,
+      sceneNumbers: [for (final n in via['scene_numbers'] as List<dynamic>) n as String],
+    );
+  }
+
+  final String id;
+  final String displayName;
+  final String role;
+
+  /// False for someone added by name: they will not get a notification, so
+  /// the producer has to tell them.
+  final bool hasAccount;
+  final bool onSetAllDay;
+  final List<String> sceneNumbers;
+}
+
+/// POST /api/changes/preview: who and what moving a day would affect. Nothing
+/// has changed yet when the app has one of these.
+class ChangePreview {
+  const ChangePreview({
+    required this.previewToken,
+    required this.shootingDayId,
+    required this.diff,
+    required this.scenes,
+    required this.participants,
+    required this.willNotifyCount,
+  });
+
+  factory ChangePreview.fromJson(Map<String, dynamic> json) {
+    final change = json['change'] as Map<String, dynamic>;
+    final affected = json['affected'] as Map<String, dynamic>;
+    return ChangePreview(
+      previewToken: json['preview_token'] as String,
+      shootingDayId: change['shooting_day_id'] as String,
+      diff: {
+        for (final entry in (change['diff'] as Map<String, dynamic>).entries)
+          entry.key: FieldChange.fromJson(entry.value as Map<String, dynamic>),
+      },
+      scenes: _list(affected['scenes'], SceneRef.fromJson),
+      participants: _list(affected['participants'], AffectedParticipant.fromJson),
+      willNotifyCount: json['will_notify_count'] as int,
+    );
+  }
+
+  /// What confirming will send back (US-08). Opaque: never look inside.
+  final String previewToken;
+  final String shootingDayId;
+
+  /// Only the fields that change: `shoot_date`, `call_time`, `location`.
+  final Map<String, FieldChange> diff;
+  final List<SceneRef> scenes;
+  final List<AffectedParticipant> participants;
+  final int willNotifyCount;
+}
+
 /// A shooting day as seen by one person: which scenes they are in.
 class AgendaDay {
   const AgendaDay({

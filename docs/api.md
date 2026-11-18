@@ -110,17 +110,17 @@ Updated in the same PR that implements an endpoint.
 | `GET /api/projects/{project_id}` | US-02 | implemented |
 | `GET /api/invites/{code}` | US-03 | implemented |
 | `POST /api/invites/{code}/join` | US-03 | implemented |
-| `GET /api/projects/{project_id}/participants` | US-06 | `501` |
-| `POST /api/projects/{project_id}/participants` | US-06 | `501` |
+| `GET /api/projects/{project_id}/participants` | US-06 | implemented |
+| `POST /api/projects/{project_id}/participants` | US-06 | implemented |
 | `GET /api/projects/{project_id}/days` | US-04 | implemented |
 | `POST /api/projects/{project_id}/days` | US-04 | implemented |
 | `GET /api/days/{day_id}` | US-05 | implemented |
-| `PUT /api/days/{day_id}/participants` | US-06 | `501` |
-| `GET /api/projects/{project_id}/scenes` | US-06 | `501` |
-| `POST /api/projects/{project_id}/scenes` | US-06 | `501` |
-| `PATCH /api/scenes/{scene_id}` | US-06 | `501` |
-| `PUT /api/scenes/{scene_id}/participants` | US-06 | `501` |
-| `POST /api/changes/preview` | US-07 | `501` |
+| `PUT /api/days/{day_id}/participants` | US-06 | implemented |
+| `GET /api/projects/{project_id}/scenes` | US-06 | implemented |
+| `POST /api/projects/{project_id}/scenes` | US-06 | implemented |
+| `PATCH /api/scenes/{scene_id}` | US-06 | implemented |
+| `PUT /api/scenes/{scene_id}/participants` | US-06 | implemented |
+| `POST /api/changes/preview` | US-07 | implemented |
 | `POST /api/changes/apply` | US-08 | `501` |
 | `GET /api/projects/{project_id}/changes` | US-08 | `501` |
 | `GET /api/me/today` | US-05 | implemented |
@@ -376,8 +376,9 @@ are unique per account, but the server refuses rather than guesses).
 
 ### GET /api/projects/{project_id}/participants
 
-Any member. Ordered by role (producer, crew, cast), then name.
-`200`: `{ "data": [Participant], "next_cursor": null }`.
+Any member. Ordered by role (producer, crew, cast), then name ignoring case.
+`200`: `{ "data": [Participant], "next_cursor": null }`. A crew is 5–15 people,
+so this list is never paged: `next_cursor` is always `null`.
 
 ### POST /api/projects/{project_id}/participants
 
@@ -453,9 +454,9 @@ The call sheet. Any member.
 }
 ```
 
-Until the US-06 endpoints exist there is no way to add scenes or put people on
-set through the API, so `scenes` and `on_set_all_day` are `[]` for every day
-created so far. They are never `null`.
+`scenes` and `on_set_all_day` are `[]` when nothing is attached, never `null`.
+People are listed producers first, then crew, then cast, each by name ignoring
+case; scenes by `number` as plain text.
 
 Errors: `404 day_not_found`.
 
@@ -469,7 +470,8 @@ clears it.
 { "participant_ids": [ "…uuid…", "…uuid…" ] }
 ```
 
-`200`: `{ "on_set_all_day": [ParticipantRef] }`.
+`200`: `{ "on_set_all_day": [ParticipantRef] }`. Duplicate ids are ignored.
+Leaving `participant_ids` out is a `422`, not "clear": send `[]` for that.
 
 Errors: `422 validation_failed` (an id that is not a participant of this
 project — `fields.participant_ids` says which), `403 forbidden`,
@@ -485,7 +487,11 @@ Any member. Filters, both optional: `?shooting_day_id=<uuid>` or
 `?unscheduled=true`. Ordered by `number` as text (`12A` sorts before `2`; the
 client may sort naturally for display).
 
-`200`: `{ "data": [Scene], "next_cursor": null }`.
+`200`: `{ "data": [Scene], "next_cursor": null }` — never paged, like
+participants.
+
+Errors: `422 validation_failed` (a `shooting_day_id` that is not a UUID,
+`unscheduled` other than `true`/`false`, or both filters at once).
 
 ### POST /api/projects/{project_id}/scenes
 
@@ -512,6 +518,10 @@ unschedules the scene. `number` cannot be changed.
 `200`: **Scene**. Writes one **ChangeEvent** (`entity_type: "scene"`) with the
 fields that actually changed; no event if nothing did. Moving a scene does **not**
 go through the impact preview and sends no notifications (grooming decision).
+
+An empty body `{}` changes nothing and returns the scene. `description: null`
+is a `422` (send `""` to clear it); `number` in the body is a `422` with
+`fields.number`.
 
 Errors: `422 validation_failed`, `403 forbidden`, `404 scene_not_found`.
 
@@ -719,6 +729,14 @@ Errors: `404 notification_not_found`.
 ---
 
 ## Changes to this contract
+
+### 17 November 2026 — US-06 and US-07 implemented
+
+No breaking changes. Clarified what the contract left open: the participant
+and scene lists are never paged; `PUT …/participants` without
+`participant_ids` is a `422`; `PATCH /api/scenes` rejects `description: null`
+and `number`; names sort ignoring case. Validation errors in a preview's `to`
+are reported as `fields["to.shoot_date"]` and so on.
 
 ### 2 November 2026 — full MVP contract
 

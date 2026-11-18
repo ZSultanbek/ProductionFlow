@@ -57,6 +57,20 @@ final callSheetProvider = FutureProvider.autoDispose.family<CallSheet, String>((
   return ref.watch(backendProvider).callSheet(dayId);
 });
 
+final participantsProvider = FutureProvider.autoDispose.family<List<Participant>, String>((
+  ref,
+  projectId,
+) {
+  ref.watch(_userIdProvider);
+  return ref.watch(backendProvider).participants(projectId);
+});
+
+/// Every scene of a project, on a day or not.
+final scenesProvider = FutureProvider.autoDispose.family<List<Scene>, String>((ref, projectId) {
+  ref.watch(_userIdProvider);
+  return ref.watch(backendProvider).scenes(projectId);
+});
+
 /// Today's days for the logged-in user. "Today" is the phone's local date.
 final todayProvider = FutureProvider.autoDispose<Today>((ref) {
   ref.watch(_userIdProvider);

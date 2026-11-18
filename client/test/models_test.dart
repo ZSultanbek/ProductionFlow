@@ -135,4 +135,25 @@ void main() {
     expect(nothing.date, isNull);
     expect(nothing.days, isEmpty);
   });
+
+  test('scenes fixture parses as scenes, with null for no day', () {
+    final scenes = dataOf('scenes.json').map(Scene.fromJson).toList();
+    expect(scenes.firstWhere((s) => s.number == '12A').shootingDayId, isNotNull);
+    expect(scenes.firstWhere((s) => s.number == '21').shootingDayId, isNull);
+  });
+
+  test('change preview fixture parses, with every reason a person is affected', () {
+    final preview = ChangePreview.fromJson(fixture('change_preview.json'));
+    expect(preview.previewToken, isNotEmpty);
+    expect(preview.diff.keys, containsAll(['shoot_date', 'call_time']));
+    expect(preview.diff['shoot_date']?.from, '2026-10-04');
+    expect(preview.scenes.map((s) => s.number), ['12A', '12B', '13']);
+
+    final aisha = preview.participants.firstWhere((p) => p.displayName == 'Aisha');
+    expect(aisha.sceneNumbers, ['12A', '12B']);
+    expect(aisha.onSetAllDay, isFalse);
+    final ruslan = preview.participants.firstWhere((p) => p.displayName == 'Ruslan');
+    expect(ruslan.hasAccount, isFalse);
+    expect(preview.willNotifyCount, 2);
+  });
 }

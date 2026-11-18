@@ -120,8 +120,9 @@ ProductionFlow/
         invite/                      US-03
         today/                       US-05
         shooting_day/                US-04 call sheet + day list
-        scenes/                      US-06
-        changes/                     US-07 preview sheet, US-08 feed
+        scenes/                      US-06 ✓ add a scene, put it on a day
+        people/                      US-06 ✓ add by name, choose who is needed
+        changes/                     US-07 ✓ move a day → impact preview; US-08 feed
         my_schedule/                 US-10
         notifications/               US-09
     web/
@@ -269,7 +270,7 @@ apply in review:
 
 The rule that matters most: **the impact computation lives in `domain` and takes
 already-loaded data as arguments.** The store loads a day, its scenes, and the
-links; `domain.Impact(...)` decides who is affected. That is what makes US-07
+links; `domain.ComputeImpact(...)` decides who is affected. That is what makes US-07
 unit-testable without Postgres, and it is the one place a bug would make the
 product lie to its users.
 
@@ -345,7 +346,8 @@ POST /api/changes/preview  {kind, shooting_day_id, to:{...}}
   2. load day; validate `to`; reject a no-op (422 no_change)
   3. load the day's scenes, scene_participant links, shooting_day_participant links,
      and the participants they point to
-  4. affected := domain.Impact(day, scenes, sceneLinks, dayLinks, participants)
+  4. affected := domain.ComputeImpact(day, store.ImpactInput(day))
+     (scenes, scene links, day links, the project's participants)
   5. token := auth.SignPreview{kind, day_id, hash(to), day.updated_at,
                                hash(affected ids), user_id, exp = now + 10 min}
   6. return diff + affected + token
@@ -383,7 +385,7 @@ The token is `base64url(payload) "." base64url(HMAC-SHA256(key, payload))` where
 `key = HMAC-SHA256(JWT_SECRET, "productionflow/preview-token/v1")` — one secret to
 manage, but a preview token can never be confused with an access token.
 
-**`domain.Impact` contract** — the unit tests are written against this:
+**`domain.ComputeImpact` contract** — the unit tests are written against this:
 
 - Affected scenes = scenes whose `shooting_day_id` is the day.
 - Affected participants = (people linked to any affected scene) ∪ (people linked
@@ -404,6 +406,11 @@ manage, but a preview token can never be confused with an access token.
 - Two producers applying conflicting changes to the same day: the `FOR UPDATE`
   serialises them, the second one sees a changed `updated_at` and gets
   `preview_stale`. That is the whole concurrency story and it is enough.
+- Everything that changes who a day affects — adding a scene to it, moving a
+  scene on or off it, replacing the people in one of its scenes or on set for
+  it — takes the same `FOR UPDATE` lock on the day first (`store.lockDays`).
+  So apply's recomputed impact can never be read halfway through such a
+  change. Days are locked in id order, so two of these cannot deadlock.
 
 ### 4.6 Configuration
 
@@ -417,7 +424,7 @@ All from the environment. Existing ones are marked ✓.
 | `SHUTDOWN_TIMEOUT_SECONDS` ✓ | `10` | |
 | `JWT_SECRET` | dev-only constant | **Required in prod**; the API refuses to start without it. 32+ random bytes |
 | `JWT_TTL_HOURS` | `168` | |
-| `PREVIEW_TTL_MINUTES` | `10` | |
+| `PREVIEW_TTL_MINUTES` ✓ | `10` | How long a preview token can be confirmed |
 | `CORS_ALLOWED_ORIGINS` | empty | e.g. `https://productionflow.pages.dev` |
 | `PUBLIC_WEB_URL` | `http://localhost:3000` | Used to build invite links: `{PUBLIC_WEB_URL}/join/{code}` |
 | `DB_MAX_CONNS` | `4` | |

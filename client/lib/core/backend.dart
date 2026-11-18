@@ -45,6 +45,52 @@ abstract class Backend {
 
   /// [date] is the phone's local date, YYYY-MM-DD. The server never guesses it.
   Future<Today> today(String date);
+
+  // --- people and scenes (US-06) ---
+
+  /// Everyone in the project: producers, then crew, then cast.
+  Future<List<Participant>> participants(String projectId);
+
+  /// Producer only. Adds someone by name, who may never install the app.
+  /// [role] is `crew` or `cast`; [email] is optional.
+  Future<Participant> addParticipant(
+    String projectId, {
+    required String displayName,
+    required String role,
+    String? email,
+  });
+
+  /// Producer only. Replaces who is on set for the whole day.
+  Future<List<ParticipantRef>> setDayParticipants(String dayId, List<String> participantIds);
+
+  /// Every scene of the project, on a day or not.
+  Future<List<Scene>> scenes(String projectId);
+
+  /// Producer only. [shootingDayId] null makes an unscheduled scene.
+  Future<Scene> createScene(
+    String projectId, {
+    required String number,
+    required String description,
+    String? shootingDayId,
+  });
+
+  /// Producer only. Puts a scene on a day, or takes it off ([shootingDayId]
+  /// null). No preview and no notifications — see docs/api.md.
+  Future<Scene> moveScene(String sceneId, String? shootingDayId);
+
+  /// Producer only. Replaces who is needed in the scene.
+  Future<Scene> setSceneParticipants(String sceneId, List<String> participantIds);
+
+  // --- the impact view (US-07) ---
+
+  /// Producer only. What moving a day would affect. Writes nothing. Pass only
+  /// the fields that change; at least one.
+  Future<ChangePreview> previewMoveDay(
+    String dayId, {
+    String? shootDate,
+    String? callTime,
+    String? location,
+  });
 }
 
 /// The one error type screens see. It mirrors the API's error envelope:

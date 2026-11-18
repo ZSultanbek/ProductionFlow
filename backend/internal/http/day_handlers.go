@@ -15,6 +15,8 @@ type DayStore interface {
 	DaysForProject(ctx context.Context, projectID, from string, after *store.DayKeyset, limit int) ([]domain.ShootingDay, error)
 	CallSheetForUser(ctx context.Context, userID, dayID string) (domain.CallSheet, error)
 	TodayForUser(ctx context.Context, userID, date string) (string, []domain.AgendaDay, error)
+	DayForUser(ctx context.Context, userID, dayID string) (domain.ShootingDay, domain.Membership, error)
+	SetDayParticipants(ctx context.Context, dayID string, participantIDs []string) ([]domain.ParticipantRef, error)
 }
 
 // --- wire shapes (docs/api.md, "Shared shapes" and "Shooting days") ---

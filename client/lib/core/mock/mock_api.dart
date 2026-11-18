@@ -80,11 +80,15 @@ class MockBackend implements Backend {
 
     final scenes = await _read('scenes.json');
     for (final item in scenes['data'] as List<dynamic>) {
-      final json = item as Map<String, dynamic>;
+      final scene = Scene.fromJson(item as Map<String, dynamic>);
       _scenes.add(
         _MockScene(
-          dayId: json['shooting_day_id'] as String?,
-          scene: CallSheetScene.fromJson(json),
+          id: scene.id,
+          projectId: scene.projectId,
+          dayId: scene.shootingDayId,
+          number: scene.number,
+          description: scene.description,
+          participantIds: [for (final person in scene.participants) person.id],
         ),
       );
     }
@@ -141,6 +145,17 @@ class MockBackend implements Backend {
       inviteUrl: 'http://localhost:3000/join/$code',
     );
     _projects.add(project);
+    // The creator is the project's first participant, as on the server.
+    _participants.add(
+      Participant(
+        id: project.myParticipantId,
+        projectId: project.id,
+        displayName: _auth.user.displayName,
+        role: Roles.producer,
+        hasAccount: true,
+        email: _auth.user.email,
+      ),
+    );
     return project;
   }
 
@@ -236,14 +251,15 @@ class MockBackend implements Backend {
         shootDate: day.shootDate,
         callTime: day.callTime,
         location: day.location,
-        onSetAllDay: [
-          for (final person in _participants)
-            if (onSet.contains(person.id))
-              ParticipantRef(id: person.id, displayName: person.displayName, role: person.role),
-        ],
+        onSetAllDay: _refs(onSet),
         scenes: [
-          for (final entry in _scenes)
-            if (entry.dayId == day.id) entry.scene,
+          for (final entry in _sorted(_scenes.where((entry) => entry.dayId == day.id)))
+            CallSheetScene(
+              id: entry.id,
+              number: entry.number,
+              description: entry.description,
+              participants: _refs(entry.participantIds),
+            ),
         ],
       );
     }
@@ -286,13 +302,9 @@ class MockBackend implements Backend {
           callTime: day.callTime,
           location: day.location,
           myScenes: [
-            for (final entry in _scenes)
-              if (entry.dayId == day.id && entry.scene.participants.any((p) => p.id == me))
-                SceneRef(
-                  id: entry.scene.id,
-                  number: entry.scene.number,
-                  description: entry.scene.description,
-                ),
+            for (final entry in _sorted(_scenes.where((entry) => entry.dayId == day.id)))
+              if (entry.participantIds.contains(me))
+                SceneRef(id: entry.id, number: entry.number, description: entry.description),
           ],
           iAmOnSetAllDay: (_onSetAllDay[day.id] ?? const <String>[]).contains(me),
         ),
@@ -301,7 +313,234 @@ class MockBackend implements Backend {
     return Today(date: target, isToday: target == date, days: agenda);
   }
 
+  // --- people and scenes ---
+
+  @override
+  Future<List<Participant>> participants(String projectId) async {
+    await project(projectId);
+    final list = _participants.where((p) => p.projectId == projectId).toList();
+    list.sort(_byRoleThenName);
+    return list;
+  }
+
+  @override
+  Future<Participant> addParticipant(
+    String projectId, {
+    required String displayName,
+    required String role,
+    String? email,
+  }) async {
+    await _requireProducer(projectId);
+    if (email != null &&
+        _participants.any(
+          (p) => p.projectId == projectId && p.email?.toLowerCase() == email.toLowerCase(),
+        )) {
+      throw const ApiException(
+        code: 'participant_email_taken',
+        message: 'someone in this project already has that email',
+      );
+    }
+    _created++;
+    final person = Participant(
+      id: 'mock-person-$_created',
+      projectId: projectId,
+      displayName: displayName,
+      role: role,
+      hasAccount: false,
+      email: email,
+    );
+    _participants.add(person);
+    return person;
+  }
+
+  @override
+  Future<List<ParticipantRef>> setDayParticipants(String dayId, List<String> participantIds) async {
+    final day = _day(dayId);
+    await _requireProducer(day.projectId);
+    _onSetAllDay[dayId] = participantIds.toSet().toList();
+    return _refs(_onSetAllDay[dayId]!);
+  }
+
+  @override
+  Future<List<Scene>> scenes(String projectId) async {
+    await project(projectId);
+    return [
+      for (final entry in _sorted(_scenes.where((entry) => entry.projectId == projectId)))
+        _toScene(entry),
+    ];
+  }
+
+  @override
+  Future<Scene> createScene(
+    String projectId, {
+    required String number,
+    required String description,
+    String? shootingDayId,
+  }) async {
+    await _requireProducer(projectId);
+    if (_scenes.any((entry) => entry.projectId == projectId && entry.number == number)) {
+      throw const ApiException(
+        code: 'scene_number_taken',
+        message: 'this project already has a scene with that number',
+      );
+    }
+    _created++;
+    final entry = _MockScene(
+      id: 'mock-scene-$_created',
+      projectId: projectId,
+      dayId: shootingDayId,
+      number: number,
+      description: description,
+      participantIds: [],
+    );
+    _scenes.add(entry);
+    return _toScene(entry);
+  }
+
+  @override
+  Future<Scene> moveScene(String sceneId, String? shootingDayId) async {
+    final entry = _scene(sceneId);
+    await _requireProducer(entry.projectId);
+    entry.dayId = shootingDayId;
+    return _toScene(entry);
+  }
+
+  @override
+  Future<Scene> setSceneParticipants(String sceneId, List<String> participantIds) async {
+    final entry = _scene(sceneId);
+    await _requireProducer(entry.projectId);
+    entry.participantIds = participantIds.toSet().toList();
+    return _toScene(entry);
+  }
+
+  // --- the impact view ---
+
+  /// The same rule as the server's domain.ComputeImpact, over the mock data:
+  /// the day's scenes, and everyone in them or on set all day, once each.
+  @override
+  Future<ChangePreview> previewMoveDay(
+    String dayId, {
+    String? shootDate,
+    String? callTime,
+    String? location,
+  }) async {
+    final day = _day(dayId);
+    final parent = await _requireProducer(day.projectId);
+
+    final diff = <String, FieldChange>{
+      if (shootDate != null && shootDate != day.shootDate)
+        'shoot_date': FieldChange(from: day.shootDate, to: shootDate),
+      if (callTime != null && callTime != day.callTime)
+        'call_time': FieldChange(from: day.callTime, to: callTime),
+      if (location != null && location != day.location)
+        'location': FieldChange(from: day.location, to: location),
+    };
+    if (diff.isEmpty) {
+      throw const ApiException(code: 'no_change', message: 'the day already has these values');
+    }
+
+    final scenes = _sorted(_scenes.where((entry) => entry.dayId == dayId));
+    final onSet = _onSetAllDay[dayId] ?? const <String>[];
+    final people = <AffectedParticipant>[];
+    for (final person in await participants(day.projectId)) {
+      final numbers = [
+        for (final entry in scenes)
+          if (entry.participantIds.contains(person.id)) entry.number,
+      ];
+      final allDay = onSet.contains(person.id);
+      if (numbers.isEmpty && !allDay) {
+        continue;
+      }
+      people.add(
+        AffectedParticipant(
+          id: person.id,
+          displayName: person.displayName,
+          role: person.role,
+          hasAccount: person.hasAccount,
+          onSetAllDay: allDay,
+          sceneNumbers: numbers,
+        ),
+      );
+    }
+
+    return ChangePreview(
+      previewToken: 'mock-preview-token',
+      shootingDayId: dayId,
+      diff: diff,
+      scenes: [
+        for (final entry in scenes)
+          SceneRef(id: entry.id, number: entry.number, description: entry.description),
+      ],
+      participants: people,
+      willNotifyCount: people
+          .where((p) => p.hasAccount && p.id != parent.myParticipantId)
+          .length,
+    );
+  }
+
   // --- helpers ---
+
+  ShootingDay _day(String dayId) {
+    for (final day in _days) {
+      if (day.id == dayId) {
+        return day;
+      }
+    }
+    throw const ApiException(code: 'day_not_found', message: 'no such shooting day');
+  }
+
+  _MockScene _scene(String sceneId) {
+    for (final entry in _scenes) {
+      if (entry.id == sceneId) {
+        return entry;
+      }
+    }
+    throw const ApiException(code: 'scene_not_found', message: 'no such scene');
+  }
+
+  Future<Project> _requireProducer(String projectId) async {
+    final parent = await project(projectId);
+    if (!parent.iAmProducer) {
+      throw const ApiException(
+        code: 'forbidden',
+        message: 'only a producer of this project can do that',
+      );
+    }
+    return parent;
+  }
+
+  Scene _toScene(_MockScene entry) => Scene(
+    id: entry.id,
+    projectId: entry.projectId,
+    shootingDayId: entry.dayId,
+    number: entry.number,
+    description: entry.description,
+    participants: _refs(entry.participantIds),
+  );
+
+  /// The people with these ids, in call-sheet order.
+  List<ParticipantRef> _refs(List<String> ids) {
+    final people = _participants.where((p) => ids.contains(p.id)).toList();
+    people.sort(_byRoleThenName);
+    return [
+      for (final person in people)
+        ParticipantRef(id: person.id, displayName: person.displayName, role: person.role),
+    ];
+  }
+
+  static List<_MockScene> _sorted(Iterable<_MockScene> scenes) {
+    return scenes.toList()..sort((a, b) => a.number.compareTo(b.number));
+  }
+
+  static const List<String> _roleOrder = [Roles.producer, Roles.crew, Roles.cast];
+
+  static int _byRoleThenName(Participant a, Participant b) {
+    final byRole = _roleOrder.indexOf(a.role).compareTo(_roleOrder.indexOf(b.role));
+    if (byRole != 0) {
+      return byRole;
+    }
+    return a.displayName.toLowerCase().compareTo(b.displayName.toLowerCase());
+  }
 
   ShootingDay _withSceneCount(ShootingDay day) {
     return ShootingDay(
@@ -323,9 +562,21 @@ class MockBackend implements Backend {
 }
 
 class _MockScene {
-  const _MockScene({required this.dayId, required this.scene});
+  _MockScene({
+    required this.id,
+    required this.projectId,
+    required this.dayId,
+    required this.number,
+    required this.description,
+    required this.participantIds,
+  });
+
+  final String id;
+  final String projectId;
 
   /// Null for an unscheduled scene.
-  final String? dayId;
-  final CallSheetScene scene;
+  String? dayId;
+  final String number;
+  final String description;
+  List<String> participantIds;
 }

@@ -122,7 +122,7 @@ class _AddDayDialogState extends ConsumerState<AddDayDialog> {
               FormError(_error!),
               const SizedBox(height: AppTheme.space4),
             ],
-            _PickerField(
+            PickerField(
               label: 'Date',
               value: shootDate == null ? 'Pick a date' : formatShootDate(shootDate),
               icon: Icons.calendar_today_outlined,
@@ -130,7 +130,7 @@ class _AddDayDialogState extends ConsumerState<AddDayDialog> {
               onTap: _busy ? null : _pickDate,
             ),
             const SizedBox(height: AppTheme.space4),
-            _PickerField(
+            PickerField(
               label: 'Call time',
               value: _callTime,
               icon: Icons.schedule_rounded,
@@ -163,9 +163,11 @@ class _AddDayDialogState extends ConsumerState<AddDayDialog> {
   }
 }
 
-/// Looks like a text field, opens a picker when tapped.
-class _PickerField extends StatelessWidget {
-  const _PickerField({
+/// Looks like a text field, opens a picker when tapped. Shared with the move
+/// dialog (features/changes), so a date is picked the same way in both.
+class PickerField extends StatelessWidget {
+  const PickerField({
+    super.key,
     required this.label,
     required this.value,
     required this.icon,

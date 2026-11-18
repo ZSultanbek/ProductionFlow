@@ -479,12 +479,12 @@ void main() {
 
     testWidgets('a day with nothing attached says so plainly', (tester) async {
       final backend = FakeBackend();
-      final project = backend.addProject('Dead Air');
+      final project = backend.addProject('Dead Air', role: Roles.crew);
       backend.sheets['d1'] = CallSheet(
         id: 'd1',
         projectId: project.id,
         projectName: 'Dead Air',
-        myRole: Roles.producer,
+        myRole: Roles.crew,
         shootDate: '2026-10-04',
         callTime: '07:30',
         location: '',

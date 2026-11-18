@@ -16,6 +16,8 @@ type ProjectStore interface {
 	ProjectForUser(ctx context.Context, userID, projectID string) (domain.Membership, error)
 	ProjectByInviteCode(ctx context.Context, code string) (domain.Project, error)
 	JoinProject(ctx context.Context, user domain.User, projectID string, role domain.Role) (domain.Participant, bool, error)
+	ParticipantsForProject(ctx context.Context, projectID string) ([]domain.Participant, error)
+	CreateParticipant(ctx context.Context, projectID string, in domain.ParticipantInput) (domain.Participant, error)
 }
 
 // --- wire shapes (docs/api.md, "Shared shapes") ---

@@ -11,6 +11,8 @@ import (
 var (
 	ErrNotFound   = errors.New("store: not found")
 	ErrEmailTaken = errors.New("store: email already registered")
+	// ErrSceneNumberTaken: the project already has a scene with that number.
+	ErrSceneNumberTaken = errors.New("store: scene number already in project")
 )
 
 // Postgres error codes we act on. Full list:

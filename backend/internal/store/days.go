@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/jackc/pgx/v5"
 
@@ -25,9 +26,20 @@ const dayColumns = `d.id::text, d.project_id::text,
 	to_char(d.shoot_date, 'YYYY-MM-DD'), to_char(d.call_time, 'HH24:MI'),
 	d.location, d.updated_at`
 
-// roleOrder sorts people the way a call sheet lists them: producers, then crew,
-// then cast. Callers alias participant as pa.
-const roleOrder = `array_position(ARRAY['producer', 'crew', 'cast'], pa.role)`
+// peopleOrder sorts people the way a call sheet lists them: producers, then
+// crew, then cast, each by name ignoring case. Callers alias participant as pa.
+//
+// It must agree with the sort in domain.ComputeImpact, so the impact preview
+// lists people in the same order as the call sheet. Hence lower() rather than
+// the database's collation, which differs between machines (Docker, Neon, a
+// laptop) and would put "Ruslan" before "daniyar" on some of them.
+const peopleOrder = `array_position(ARRAY['producer', 'crew', 'cast'], pa.role),
+	lower(pa.display_name), pa.display_name, pa.id`
+
+// sceneOrder sorts scenes by number as plain text ("12A" before "2"), byte by
+// byte, the same on every database and the same as domain.ComputeImpact.
+// Callers alias scene as s.
+const sceneOrder = `s.number COLLATE "C", s.id`
 
 // CreateDay adds a shooting day to a project. The caller has already checked
 // that the user is a producer there and that the input is valid.
@@ -116,7 +128,7 @@ func (db *DB) CallSheetForUser(ctx context.Context, userID, dayID string) (domai
 		FROM shooting_day_participant sdp
 		JOIN participant pa ON pa.id = sdp.participant_id
 		WHERE sdp.shooting_day_id = $1
-		ORDER BY `+roleOrder+`, pa.display_name, pa.id`,
+		ORDER BY `+peopleOrder,
 		dayID)
 	if err != nil {
 		return domain.CallSheet{}, fmt.Errorf("call sheet: on set all day: %w", err)
@@ -128,10 +140,10 @@ func (db *DB) CallSheetForUser(ctx context.Context, userID, dayID string) (domai
 
 	// The day's scenes, then everyone in them in one query, grouped in Go.
 	rows, err = db.Pool.Query(ctx, `
-		SELECT id::text, number, description
-		FROM scene
-		WHERE shooting_day_id = $1
-		ORDER BY number, id`,
+		SELECT s.id::text, s.number, s.description
+		FROM scene s
+		WHERE s.shooting_day_id = $1
+		ORDER BY `+sceneOrder,
 		dayID)
 	if err != nil {
 		return domain.CallSheet{}, fmt.Errorf("call sheet: scenes: %w", err)
@@ -156,7 +168,7 @@ func (db *DB) CallSheetForUser(ctx context.Context, userID, dayID string) (domai
 		JOIN scene_participant sp ON sp.scene_id = s.id
 		JOIN participant pa ON pa.id = sp.participant_id
 		WHERE s.shooting_day_id = $1
-		ORDER BY `+roleOrder+`, pa.display_name, pa.id`,
+		ORDER BY `+peopleOrder,
 		dayID)
 	if err != nil {
 		return domain.CallSheet{}, fmt.Errorf("call sheet: scene participants: %w", err)
@@ -255,7 +267,7 @@ func (db *DB) TodayForUser(ctx context.Context, userID, date string) (string, []
 		JOIN scene_participant sp ON sp.scene_id = s.id
 		JOIN participant pa ON pa.id = sp.participant_id
 		WHERE pa.user_id = $1 AND d.shoot_date = $2::date
-		ORDER BY s.number, s.id`,
+		ORDER BY `+sceneOrder,
 		userID, *target)
 	if err != nil {
 		return "", nil, fmt.Errorf("today: my scenes: %w", err)
@@ -278,4 +290,96 @@ func (db *DB) TodayForUser(ctx context.Context, userID, date string) (string, []
 	}
 
 	return *target, days, nil
+}
+
+// DayForUser returns a day and the user's membership of its project.
+// ErrNotFound if there is no such day or the user is not in its project — the
+// same answer for both, as everywhere.
+func (db *DB) DayForUser(ctx context.Context, userID, dayID string) (domain.ShootingDay, domain.Membership, error) {
+	var (
+		d    domain.ShootingDay
+		m    domain.Membership
+		role string
+	)
+	err := db.Pool.QueryRow(ctx, `
+		SELECT `+dayColumns+`,
+		       (SELECT count(*) FROM scene s WHERE s.shooting_day_id = d.id),
+		       `+membershipColumns+`
+		FROM shooting_day d
+		JOIN project p ON p.id = d.project_id
+		JOIN participant pa ON pa.project_id = d.project_id AND pa.user_id = $1
+		WHERE d.id = $2`,
+		userID, dayID,
+	).Scan(&d.ID, &d.ProjectID, &d.ShootDate, &d.CallTime, &d.Location, &d.UpdatedAt, &d.SceneCount,
+		&m.Project.ID, &m.Project.Name, &m.Project.InviteCode, &m.Project.CreatedAt, &m.ParticipantID, &role)
+	if errors.Is(err, pgx.ErrNoRows) || isInvalidText(err) {
+		return domain.ShootingDay{}, domain.Membership{}, ErrNotFound
+	}
+	if err != nil {
+		return domain.ShootingDay{}, domain.Membership{}, fmt.Errorf("day for user: %w", err)
+	}
+	m.Role = domain.Role(role)
+	return d, m, nil
+}
+
+// SetDayParticipants replaces who is on set for the whole day. The caller has
+// checked that every id is a participant of the day's project
+// (domain.CheckParticipantIDs).
+func (db *DB) SetDayParticipants(ctx context.Context, dayID string, participantIDs []string) ([]domain.ParticipantRef, error) {
+	var refs []domain.ParticipantRef
+	err := db.WithTx(ctx, func(tx pgx.Tx) error {
+		if err := lockDays(ctx, tx, dayID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM shooting_day_participant WHERE shooting_day_id = $1`, dayID); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO shooting_day_participant (shooting_day_id, participant_id)
+			SELECT $1, unnest($2::uuid[])`,
+			dayID, participantIDs); err != nil {
+			return err
+		}
+
+		rows, err := tx.Query(ctx, `
+			SELECT pa.id::text, pa.display_name, pa.role
+			FROM shooting_day_participant sdp
+			JOIN participant pa ON pa.id = sdp.participant_id
+			WHERE sdp.shooting_day_id = $1
+			ORDER BY `+peopleOrder,
+			dayID)
+		if err != nil {
+			return err
+		}
+		refs, err = pgx.CollectRows(rows, scanParticipantRef)
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("set day participants: %w", err)
+	}
+	return refs, nil
+}
+
+// lockDays takes a row lock on each given day for the rest of the transaction.
+//
+// Anything that changes who a day affects — its scenes, the people in them, the
+// people on set — takes this lock first. So does apply (US-08), before it
+// recomputes the impact. That way apply either sees a link change in full or
+// runs entirely before it; it can never notify from a list that changed while
+// it was reading it. Ids are locked in sorted order, so two transactions that
+// both lock days A and B cannot deadlock. "" (no day) is skipped.
+func lockDays(ctx context.Context, tx pgx.Tx, dayIDs ...string) error {
+	var ids []string
+	for _, id := range dayIDs {
+		if id != "" {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		if _, err := tx.Exec(ctx, `SELECT 1 FROM shooting_day WHERE id = $1 FOR UPDATE`, id); err != nil {
+			return fmt.Errorf("lock day: %w", err)
+		}
+	}
+	return nil
 }
